@@ -21,8 +21,11 @@ class ColetaSegurPro:
                         """. strip()
         
         prompt_triagem = """
-                            Faça uma analise do que mandei de input e retorne True se existir as palavras chave: 
-                            offiline, inoperante, off-line.
+                            Análise do Problema: \n
+                            Avaliar o conteúdo do texto recebido para identificar a natureza do problema com o equipamento ou sistema.
+                            Condições de Resposta: \n
+                            Se o texto indicar que o problema pode ser diagnosticado ou resolvido remotamente (equipamento inoperante, offline, ou problemas de conectividade), devo retornar TRUE.
+                            Se o texto sugerir a necessidade de ações físicas como instalação, remanejamento, reposicionamento, ou presença física de um técnico, devo retornar FALSE.
                          """.strip()
 
         self.completion = self.client.chat.completions.create(
@@ -42,104 +45,65 @@ class ColetaSegurPro:
         return self.completion.choices[0].message.content
         
     def coletar_dados_segurpro(self):
-        url = 'https://us-central1-mse-digital.cloudfunctions.net/relatorioChamados'
+        try:
+            url = 'https://us-central1-mse-digital.cloudfunctions.net/relatorioChamados'
 
-        if not table_exist():
-            create_table()
+            if not table_exist():
+                create_table()
 
-        response = requests.get(url)
+            response = requests.get(url)
 
-        self.excel.create_excel()
+            self.excel.create_excel()
 
-        contagem_com_sistema = 1
-        contagem_sem_sistema = 1
+            if response.ok:
+                dados = response.json()
 
-        if response.status_code == 200:
-            dados = response.json()
+                response = list(
+                    filter(
+                        lambda dado: dado.get('STATUS').startswith('EM ABERTO'), dados
+                    )
+                )
 
-            # O uso do self em um for não é recomendado
-            for self.dado in dados:
-                try:
-                    if self.dado['STATUS'].startswith('EM ABERTO - '):
-
-                        response = {
-                            'ROV': self.dado['ROV'],
-                            'STATUS': self.dado['STATUS'],
-                            'NOME_SITE': self.dado['NOME_SITE'],
-                            'SISTEMA': self.dado['SISTEMA'],
-                        }
-
-                        try:
-                            
+                list(
+                    map(
+                        lambda dado: (
                             insert_data_json(
-                                self.dado['ROV'], 
-                                self.dado['STATUS'], 
-                                self.dado['NOME_SITE'], 
-                                self.dado['SISTEMA']
-                            )
-
-
+                                dado.get("ROV"), 
+                                dado.get("STATUS"), 
+                                dado.get("NOME_SITE"), 
+                                dado.get("SISTEMA")
+                            ), 
                             self.excel.append_info(
-                                self.dado['ROV'], 
-                                self.dado['STATUS'], 
-                                self.dado['NOME_SITE'], 
-                                self.dado['SISTEMA']
+                                dado.get("ROV"), 
+                                dado.get("STATUS"), 
+                                dado.get("NOME_SITE"), 
+                                dado.get("SISTEMA")
                             )
-
-                            triagem = self.chatgpt(
-                                str(self.dado['MOTIVO_ABERTURA']).lower(), 
-                                triagem = True
-                            )
-                            
-                            self.tratar_dados_questionario(triagem = triagem)
-
-                            # Criar uma função para retorno de logs, não usar print para debug/info
-                            print(f'Total de atividades cadastradas: {contagem_com_sistema}')
-                            contagem_com_sistema += 1
-
-                        except Exception as e:
-                            print(e)
-
-                except KeyError as key:
-                    self.dado[f'{key.args[0]}'] = None if str(key.args[0]) == 'NOME_SITE' else self.dado['NOME_SITE']
-                    self.dado[f'{key.args[0]}'] = 'SEM SISTEMA' if str(key.args[0]) == 'SISTEMA' else self.dado['SISTEMA']
-
-                    insert_data_json(self.dado['ROV'], self.dado['STATUS'], self.dado['NOME_SITE'], self.dado['SISTEMA'])
-                    self.excel.append_info(self.dado['ROV'], self.dado['STATUS'], self.dado['NOME_SITE'], self.dado['SISTEMA'])
-
-                    # self.tratar_dados_questionario()
-                    # print(f'Total de atividades SEM SISTEMA cadastradas: {contagem_sem_sistema}')
-                    # contagem_sem_sistema += 1
-                    contagem_com_sistema += 1
-
-                    # Criar uma função para retorno de logs, não usar print para debug/info
-                    print(f'Total de atividades cadastradas: {contagem_com_sistema}')
-                    continue
-
-                except Exception as e:
-                    raise e
-
-            print('Extração de TODOS JSON concluído')
-
-            self.excel.save_excel()
-        else:
-            print('Erro na requisição JSON')
-
+                        ), response)
+                    )
+                self.excel.save_excel()
+                list(
+                    map(
+                        lambda dado: self.tratar_dados_questionario(dado), response
+                    )
+                )
+            else:
+                raise response.status_code
+            
+        except Exception as ex:
+            raise ex
     
-    def tratar_dados_questionario(self, triagem: bool = False):
-        # Não é uma boa pratica utilizar if
-        # Repetir muitas vezes a mesma linha de código alterando apenas 1 parametro.
+    def tratar_dados_questionario(self, dado, triagem: bool = False):
+        sistema = (
+            SistemaEnum.TRIAGEM.value
+            if triagem
+            else next(
+                map(lambda s: s.value, filter(lambda s: s.name in dado['SISTEMA'], SistemaEnum)),
+                SistemaEnum.DEFAULT.value
+            )
+        )
 
-        sistema = SistemaEnum.DEFAULT.value
-        if triagem:
-            sistema = SistemaEnum.TRIAGEM.value
-        else:
-            for s in SistemaEnum:
-                if s.name in self.dado['SISTEMA']:
-                    sistema = s.value
-                    break
-    
-        # self.inserir_atividade_btime(self.dado['ROV'], sistema, self.dado['STATUS'], self.dado['NOME_SITE'])
+        self.inserir_atividade_btime(self.dado['ROV'], sistema, self.dado['STATUS'], self.dado['NOME_SITE'])
 
 
     def inserir_atividade_btime(self, rov, checklist, status, nome_site):
