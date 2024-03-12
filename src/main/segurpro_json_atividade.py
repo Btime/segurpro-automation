@@ -1,15 +1,14 @@
 import requests
 from ..model.table_json_segurpro import create_table, insert_data_json, table_exist
 from ..utils.excel_infos_json import ExcelCollector
-# from ..utils.openai import OpenAI
+from src.enum.sistema_enum import SistemaEnum
 from openai import OpenAI
-
-# client = OpenAI()
+from src.config.configuration import API_KEY_GPT
 
 class ColetaSegurPro:
     def __init__(self) -> None:
         self.excel = ExcelCollector()
-        self.__api_chatgpt = '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'
+        self.__api_chatgpt = API_KEY_GPT
 
     def chatgpt(self, texto: str, triagem: bool = False):
         self.client = OpenAI(api_key=self.__api_chatgpt)
@@ -71,7 +70,7 @@ class ColetaSegurPro:
                         }
 
                         try:
-                            # o maximo de colunas deve ser 120 por padrao, deixei um exemplo abaixo
+                            
                             insert_data_json(
                                 self.dado['ROV'], 
                                 self.dado['STATUS'], 
@@ -80,9 +79,18 @@ class ColetaSegurPro:
                             )
 
 
-                            self.excel.append_info(self.dado['ROV'], self.dado['STATUS'], self.dado['NOME_SITE'], self.dado['SISTEMA'])
+                            self.excel.append_info(
+                                self.dado['ROV'], 
+                                self.dado['STATUS'], 
+                                self.dado['NOME_SITE'], 
+                                self.dado['SISTEMA']
+                            )
 
-                            triagem = self.chatgpt(str(self.dado['MOTIVO_ABERTURA']).lower(), triagem = True)
+                            triagem = self.chatgpt(
+                                str(self.dado['MOTIVO_ABERTURA']).lower(), 
+                                triagem = True
+                            )
+                            
                             self.tratar_dados_questionario(triagem = triagem)
 
                             # Criar uma função para retorno de logs, não usar print para debug/info
@@ -122,16 +130,16 @@ class ColetaSegurPro:
         # Não é uma boa pratica utilizar if
         # Repetir muitas vezes a mesma linha de código alterando apenas 1 parametro.
 
+        sistema = SistemaEnum.DEFAULT.value
         if triagem:
-            self.inserir_atividade_btime(self.dado['ROV'], 42, self.dado['STATUS'], self.dado['NOME_SITE'])
-        elif 'CFTV' in self.dado['SISTEMA']:
-            self.inserir_atividade_btime(self.dado['ROV'], 38, self.dado['STATUS'], self.dado['NOME_SITE'])
-        elif 'ALARME' in self.dado['SISTEMA']:
-            self.inserir_atividade_btime(self.dado['ROV'], 39, self.dado['STATUS'], self.dado['NOME_SITE'])
-        elif 'CONTROLE DE ACESSO' in self.dado['SISTEMA']:
-            self.inserir_atividade_btime(self.dado['ROV'], 40, self.dado['STATUS'], self.dado['NOME_SITE'])
+            sistema = SistemaEnum.TRIAGEM.value
         else:
-            self.inserir_atividade_btime(self.dado['ROV'], 41, self.dado['STATUS'], self.dado['NOME_SITE'])
+            for s in SistemaEnum:
+                if s.name in self.dado['SISTEMA']:
+                    sistema = s.value
+                    break
+    
+        # self.inserir_atividade_btime(self.dado['ROV'], sistema, self.dado['STATUS'], self.dado['NOME_SITE'])
 
 
     def inserir_atividade_btime(self, rov, checklist, status, nome_site):
