@@ -5,5 +5,5 @@ class SistemaEnum(Enum):
     CFTV        = 38
     ALARME      = 39
     CONTROLE    = 40
-    TRIAGEM     = 42
+    TRIAGEM     = 43
     DEFAULT     = 41

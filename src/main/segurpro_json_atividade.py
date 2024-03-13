@@ -2,8 +2,9 @@ import requests
 from ..model.table_json_segurpro import create_table, insert_data_json, table_exist
 from ..utils.excel_infos_json import ExcelCollector
 from src.enum.sistema_enum import SistemaEnum
-from openai import OpenAI
-from src.config.configuration import API_KEY_GPT
+from openai import OpenAI 
+from src.config.configuration import API_KEY_GPT, AUTHORIZATION
+from typing import Dict, Union, List
 
 class ColetaSegurPro:
     def __init__(self) -> None:
@@ -21,12 +22,14 @@ class ColetaSegurPro:
                         """. strip()
         
         prompt_triagem = """
-                            Análise do Problema: \n
-                            Avaliar o conteúdo do texto recebido para identificar a natureza do problema com o equipamento ou sistema.
-                            Condições de Resposta: \n
-                            Se o texto indicar que o problema pode ser diagnosticado ou resolvido remotamente (equipamento inoperante, offline, ou problemas de conectividade), devo retornar TRUE.
-                            Se o texto sugerir a necessidade de ações físicas como instalação, remanejamento, reposicionamento, ou presença física de um técnico, devo retornar FALSE.
+                            Análise do Problema: Avaliar o conteúdo do texto recebido para identificar a natureza do problema com o equipamento ou sistema.
+                            Condições de Resposta: Se o texto indicar que o problema pode ser diagnosticado ou resolvido remotamente (equipamento inoperante, offline, ou problemas de conectividade), devo retornar TRUE. Se o texto sugerir a necessidade de ações físicas como instalação, remanejamento, reposicionamento, ou presença física de um técnico, devo retornar FALSE.
+                            Resultado da Análise: Retornar TRUE para situações que requerem triagem e possíveis soluções remotas. Retornar FALSE para situações que necessitam de ação direta de um técnico no local.
+                            Observação: A necessidade de acompanhamento implica ações presenciais, pois geralmente envolve instalação ou supervisão física.
+                            Traga apenas o resultado TRUE ou FALSE, nenhum texto adicional pois vou utilizar api
                          """.strip()
+        
+
 
         self.completion = self.client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -37,13 +40,24 @@ class ColetaSegurPro:
                 "content": prompt_triagem if triagem else prompt_texto
             },
             {
-                "role": "user", 
+                "role": "user",
                 "content": texto
             }
         ])
 
-        return self.completion.choices[0].message.content
-        
+
+        message = self.completion.choices[0].message.content
+
+        if triagem:
+            if message.lower() == "false":
+                return False
+            else:
+                return True
+        return message
+
+        # teste = bool(message)
+        # return message
+    
     def coletar_dados_segurpro(self):
         try:
             url = 'https://us-central1-mse-digital.cloudfunctions.net/relatorioChamados'
@@ -63,55 +77,101 @@ class ColetaSegurPro:
                         lambda dado: dado.get('STATUS').startswith('EM ABERTO'), dados
                     )
                 )
-
+                
                 list(
                     map(
                         lambda dado: (
+                            x := self.verificacao_triagem(dado),
                             insert_data_json(
                                 dado.get("ROV"), 
                                 dado.get("STATUS"), 
                                 dado.get("NOME_SITE"), 
-                                dado.get("SISTEMA")
+                                dado.get("SISTEMA"),
+                                dado.get("MOTIVO_ABERTURA"),
+                                x
                             ), 
                             self.excel.append_info(
                                 dado.get("ROV"), 
                                 dado.get("STATUS"), 
                                 dado.get("NOME_SITE"), 
-                                dado.get("SISTEMA")
+                                dado.get("SISTEMA"),
+                                dado.get("MOTIVO_ABERTURA"),
+                                x
+                            ),
+                            self.tratar_dados_questionario(
+                                dado, 
+                                triagem=x
                             )
-                        ), response)
-                    )
-                self.excel.save_excel()
-                list(
-                    map(
-                        lambda dado: self.tratar_dados_questionario(dado), response
+                        ), 
+                        response
                     )
                 )
+                
+
+                
+                self.excel.save_excel()
+                # self.tratar_dados_questionario(triagem = triagem)
+
+                list(
+                    map(
+                        lambda dado: self.tratar_dados_questionario(dado, triagem=self.verificacao_triagem(dado)), response
+                    )
+                )
+
             else:
                 raise response.status_code
             
+            # triagem = self.chatgpt(str(self.dado['MOTIVO_ABERTURA']).lower(), triagem = True)
+            # self.tratar_dados_questionario(triagem = triagem)
+            
         except Exception as ex:
             raise ex
-    
-    def tratar_dados_questionario(self, dado, triagem: bool = False):
-        sistema = (
-            SistemaEnum.TRIAGEM.value
+        
+    def verificacao_triagem(self, dado):
+        motivo_abertura = dado.get('MOTIVO_ABERTURA')
+        verificacao: bool = bool(self.chatgpt(texto=motivo_abertura, triagem=True))
+        
+        return verificacao
+
+    def tratar_dados_questionario(
+        self, 
+        dado: Dict[str, Union[str, int]], 
+        triagem: bool = False
+    ) -> None:
+        """
+        Treat data from the questionnaire.
+
+        Args:
+            dado (Dict[str, Union[str, int]]): The data from the questionnaire.
+            triagem (bool, optional): Flag indicating if it is a triage. Defaults to False.
+        """
+        
+        checklist = (
+            SistemaEnum.TRIAGEM.value  # type: ignore
             if triagem
             else next(
-                map(lambda s: s.value, filter(lambda s: s.name in dado['SISTEMA'], SistemaEnum)),
+                map(
+                    lambda s: s.value, 
+                    filter(lambda s: s.name  in (dado.get('SISTEMA') or ""), SistemaEnum)
+                ),
                 SistemaEnum.DEFAULT.value
             )
         )
 
-        self.inserir_atividade_btime(self.dado['ROV'], sistema, self.dado['STATUS'], self.dado['NOME_SITE'])
+        self.inserir_atividade_btime(
+            motivo_abertura=dado.get('MOTIVO_ABERTURA'), 
+            rov=dado.get('ROV'), 
+            checklist=checklist, 
+            nome_site=dado.get('NOME_SITE')
+        )  # NOME_SITE = LOCAL NA BTIME
 
 
-    def inserir_atividade_btime(self, rov, checklist, status, nome_site):
+    def inserir_atividade_btime(self, motivo_abertura: str, rov: str, checklist: str, nome_site: str):
         headers = {
             'authority': 'api.btime.io',
             'accept': '*/*',
             'accept-language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'authorization': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTEsInJvbGVJZCI6MSwid29ya3NwYWNlIjoianVsaWEiLCJhdWQiOiJKb2tlbiIsImV4cCI6MTc0MTI4ODMwNSwiaWF0IjoxNzA5NzUyMzA1LCJpc3MiOiJKb2tlbiIsImp0aSI6IjJ1dDQ1YWRxOW4zcjR1YWczODBhOHY1MSIsIm5iZiI6MTcwOTc1MjMwNX0.7Rn3iL0yky4yGe0eQ8ufYOURuoYYEAQ9_LdNeJJ1TmQ',
+            'authorization': AUTHORIZATION,
             'content-type': 'application/json',
             'origin': 'https://julia.btime.io',
             'projectid': '1',
@@ -133,7 +193,7 @@ class ColetaSegurPro:
                 'input': {
                     'userId': 11,
                     'checklistId': checklist,
-                    'placeId': 19,
+                    'placeId': 19, # nome_site
                     'assetId': None,
                     'scheduling': '2024-03-15T19:44:00Z',
                     'priorityId': 1,
@@ -149,7 +209,7 @@ class ColetaSegurPro:
                         'longitude': -46.6395571,
                         'search': 'São Paulo, SP, Brasil',
                     },
-                    'description': self.chatgpt(self.dado["MOTIVO_ABERTURA"]),
+                    'description': self.chatgpt(motivo_abertura),
                     'documents': [],
                     'groupId': None,
                     'events': [
