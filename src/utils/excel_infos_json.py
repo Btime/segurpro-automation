@@ -9,11 +9,11 @@ class ExcelCollector:
         self.ws = self.wb.active
         self.ws.title = "SERGURPRO"
 
-        headers = ["ROV", "STATUS", "NOME_SITE", "SISTEMA", "DESCRICAO", "TRIAGEM"]
+        headers = ["ID_ACTIVITY", "ROV", "STATUS", "NOME_SITE", "SISTEMA", "DESCRICAO", "TRIAGEM"]
         self.ws.append(headers)
     
-    def append_info(self, rov, status, nome_site, sistema, descricao, triagem):
-        self.ws.append([rov, status, nome_site, sistema, descricao, triagem])
+    def append_info(self, id_activity, rov, status, nome_site, sistema, descricao, triagem):
+        self.ws.append([id_activity, rov, status, nome_site, sistema, descricao, triagem])
 
     def save_excel(self):
         self.wb.save(self.nome_excel)

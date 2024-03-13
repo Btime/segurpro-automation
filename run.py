@@ -1,5 +1,4 @@
-from src.main.segurpro_json_atividade import ColetaSegurPro
+from src import run
 
 if __name__ == '__main__':
-    executar = ColetaSegurPro()
-    executar.start()
+    run()
