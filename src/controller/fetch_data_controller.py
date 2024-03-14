@@ -23,7 +23,8 @@ class FetchData:
                     data = response.json()
                     return data
                 
-            except Exception as e:
+            except Exception as ex:
                 logger.exception(
-                    status=response.status_code
+                    status=response.status_code,
+                    error=ex
                 )

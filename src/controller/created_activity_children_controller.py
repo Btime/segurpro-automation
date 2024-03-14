@@ -8,9 +8,9 @@ from src.model.db.repository.segurpro_repository import SegurproRepository
 
 class CreatedActivityChildren:
     def __init__(self, data) -> None:
+        self.data = data
         self.chatGPT = ChatGPT()
         self.excel = ExcelCollector()
-        self.data = data
         self.segurpro_repository = SegurproRepository()
         self.log = Log()
 
@@ -154,7 +154,7 @@ class CreatedActivityChildren:
         
     def match_id_activity(self, rov):
         results = self.segurpro_repository.filter_by_rov(rov)
-        return results
+        return results.rov
     
     def verify_triage(self, data):
         opening_reason = data.get('MOTIVO_ABERTURA')
@@ -180,7 +180,10 @@ class CreatedActivityChildren:
         
         data = self.get_rov_response(self.data)
         for dado in data:
-            parent_id = self.match_id_activity(dado.get("ROV"))
+            rov = dado.get("ROV")
+            parent_id = self.match_id_activity(rov)
+            # id_activity_children = self.match_id_activity_children(rov)
+
             is_triage = self.verify_triage(dado)
             checklist = self.verify_checklist(dado, triage=is_triage)
             

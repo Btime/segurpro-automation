@@ -1,12 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.model.db.configs.base import Base
-from src.model.db.entities.segurpro import Segurpro
+from src.config.configuration import CONNECTION_STRING
 
 class DBConnectionHandler:
 
     def __init__(self) -> None:
-        self.__connection_string = f"sqlite:///segurpro.db"
+        self.__connection_string = CONNECTION_STRING
         self.__engine = self.__create_database_engine()
         self.session = None
 
