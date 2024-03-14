@@ -5,8 +5,9 @@ class Segurpro(Base):
     
     __tablename__ = "tb_segurpro"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    id_activity = Column(String)
+    id_activity = Column(Integer)
     rov = Column(Integer)
+    id_children = Column(Integer)
     status = Column(String)
     site_name = Column(String)
     system = Column(String)

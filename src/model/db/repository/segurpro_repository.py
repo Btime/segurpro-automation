@@ -15,7 +15,9 @@ class SegurproRepository:
             query = text(
                 """
                     CREATE TABLE IF NOT EXISTS tb_segurpro
-                    (id INTEGER PRIMARY KEY, ID_ACTIVITY INTEGER, ROV INTEGER, STATUS TEXT, SITE_NAME TEXT, SYSTEM TEXT, DESCRIPTION TEXT, TRIAGE INTEGER, CREATED_AT DATETIME)
+                    (id INTEGER PRIMARY KEY, ID_ACTIVITY INTEGER, ROV INTEGER, ID_CHILDREN INTEGER,
+                    STATUS TEXT, SITE_NAME TEXT, SYSTEM TEXT, DESCRIPTION TEXT, TRIAGE INTEGER,
+                    CREATED_AT DATETIME)
                 """
             )
             db.session.execute(query)
@@ -26,16 +28,22 @@ class SegurproRepository:
             data = db.session.query(Segurpro).filter(Segurpro.rov == rov).first()
             return data
 
+    def filter_by_rov_children(self, rov):
+        with DBConnectionHandler() as db:
+            data = db.session.query(Segurpro).filter(Segurpro.rov == rov).order_by(Segurpro.id.desc()).first()
+            return data
+
     def select(self):
         with DBConnectionHandler() as db:
             data = db.session.query(Segurpro).all()
             return data
 
-    def insert(self, id_activity, rov, status, site_name, system, description, triage):
+    def insert(self, id_activity, rov, id_children, status, site_name, system, description, triage):
         with DBConnectionHandler() as db:
             data_insert = Segurpro(
                 id_activity = id_activity,
                 rov = rov,
+                id_children=id_children, 
                 status = status,
                 site_name = site_name,
                 system = system,
@@ -45,7 +53,7 @@ class SegurproRepository:
             )
             db.session.add(data_insert)
             db.session.commit()
-    
+
     def update(self, column, id, value):
         with DBConnectionHandler() as db:
             query = update(Segurpro).where(Segurpro.id_activity == id).values({column: value})
