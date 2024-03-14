@@ -12,6 +12,19 @@ class CreateActivityBtime:
         self.excel = ExcelCollector()
         self.chatGPT = ChatGPT()
         self.data = data
+        self.excel.create_excel()
+
+    def filter_data(self):
+        data = list(
+            filter(
+                lambda dado: dado.get(
+                    'STATUS'
+                ).startswith(
+                    'EM ABERTO'
+                ) and not dado.get('STATUS').startswith('EM ABERTO - RETORNO TECNICO'), self.data
+            )
+        )
+        return data
 
     def save_excel_file(self):
         return self.excel.save_excel()
@@ -22,60 +35,85 @@ class CreateActivityBtime:
         return verificacao
 
 
-    def export_data(self, data: Dict[str, Union[str, int]]):
-        list(
-            map(
-                lambda dado: (
-                    x := self.verify_triage(dado),
-                    id_activity := self.insert_data(
-                        dado, 
-                        triagem=x
-                    ),
-                    insert_data_json(
-                        id_activity,
-                        dado.get("ROV"), 
-                        dado.get("STATUS"), 
-                        dado.get("NOME_SITE"), 
-                        dado.get("SISTEMA"),
-                        dado.get("MOTIVO_ABERTURA"),
-                        x
-                    ), 
-                    self.excel.append_info(
-                        id_activity,
-                        dado.get("ROV"), 
-                        dado.get("STATUS"), 
-                        dado.get("NOME_SITE"), 
-                        dado.get("SISTEMA"),
-                        dado.get("MOTIVO_ABERTURA"),
-                        x
-                    )
-                ), 
-                data
-            )
-        )
+    def export_data(self, data: Dict[str, Union[str, int]]) -> None:
+        """
+        Exports the given data to Btime and the JSON and Excel files.
 
-    def insert_data(self, data, triagem = False):
+        Args:
+            data (Dict[str, Union[str, int]]): The data to be exported.
+
+        Returns:
+            None
+        """
+        for dado in data:
+            triagem = self.verify_triage(dado)
+            checklist = self.obtain_checklist(dado, triagem=triagem)
+            activity_id = self.insert_data(dado, checklist)
+            
+            insert_data_json(
+                activity_id,
+                rov=dado.get("ROV"),
+                status=dado.get("STATUS"),
+                nome_site=dado.get("NOME_SITE"),
+                sistema=dado.get("SISTEMA"),
+                descricao=dado.get("DESCRICAO"),
+                triagem=triagem
+            )
+            
+            self.excel.append_info(
+                id_activity=activity_id,
+                rov=dado.get("ROV"),
+                status=dado.get("STATUS"),
+                nome_site=dado.get("NOME_SITE"),
+                sistema=dado.get("SISTEMA"),
+                descricao=dado.get("DESCRICAO"), 
+                triagem=triagem
+            )
+
+    def obtain_checklist(self, data: Dict[str, Union[str, int]], triagem: bool = False) -> int:
         checklist = (
-            SistemaEnum.TRIAGEM.value
+            SistemaEnum.TRIAGEM.value  
             if triagem
             else next(
                 map(
-                    lambda s: s.value, 
-                    filter(lambda s: s.name  in (data.get('SISTEMA') or ""), SistemaEnum)
+                    lambda s: s.value,
+                    filter(
+                        lambda s: s.name in (data.get("SISTEMA") or ""), SistemaEnum
+                    ),
                 ),
-                SistemaEnum.DEFAULT.value
+                SistemaEnum.DEFAULT.value,
             )
         )
-
+        return checklist
+    
+    def insert_data(self, data: Dict[str, Union[str, int]], checklist: int) -> int:
         id_activity = self.request_insert_btime(
-            motivo_abertura=data.get('MOTIVO_ABERTURA'), 
-            rov=data.get('ROV'), 
-            checklist=checklist, 
-            nome_site=data.get('NOME_SITE')
+            motivo_abertura=data.get("MOTIVO_ABERTURA"),
+            rov=data.get("ROV"),
+            checklist=checklist,
+            nome_site=data.get("NOME_SITE"),
         )
         return id_activity
     
-    def request_insert_btime(self, motivo_abertura: str, rov: str, checklist: str, nome_site: str):
+    def request_insert_btime(
+        self,
+        motivo_abertura: str,
+        rov: str,
+        checklist: str,
+        nome_site: str,
+    ) -> int:
+        """
+        Inserts a new activity in the Btime database and returns the activity ID.
+
+        Args:
+            motivo_abertura (str): The activity description.
+            rov (str): The ROV (Regional Operations Center).
+            checklist (str): The checklist ID.
+            nome_site (str): The site name.
+
+        Returns:
+            int: The activity ID.
+        """
         headers = {
             'authority': 'api.btime.io',
             'accept': '*/*',
@@ -140,5 +178,6 @@ class CreateActivityBtime:
             return data["data"]['upsertServiceOrder']['id']
 
     def run(self):
-        self.export_data(self.data)
+        data = self.filter_data()
+        self.export_data(data)
         self.save_excel_file()

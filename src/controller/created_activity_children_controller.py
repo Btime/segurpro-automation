@@ -1,15 +1,17 @@
 import requests
 
-from src.model.table_json_segurpro import buscar_rov_json, create_table, table_exist
+from src.model.table_json_segurpro import buscar_rov_json, insert_data_json
 from src.utils.chatgpt_utils import ChatGPT
+from src.utils.excel_infos_json import ExcelCollector
 from src.config.configuration import AUTHORIZATION
-from typing import Dict, Union
 from src.enum.sistema_enum import SistemaEnum
 
 class CreatedActivityChildren:
     def __init__(self, data) -> None:
         self.chatGPT = ChatGPT()
+        self.excel = ExcelCollector()
         self.data = data
+
     def __get_rov_response(self, response):
         list_rov = list(
             map(
@@ -21,11 +23,18 @@ class CreatedActivityChildren:
                         "NOME_SITE": dado.get("NOME_SITE"),
                         "STATUS": dado.get("STATUS")   
                     }
-                ), 
-                response
+                ),
+                filter(
+                    lambda dado: dado.get(
+                        'STATUS'
+                    ).startswith(
+                        'EM ABERTO - RETORNO TECNICO'
+                    ), response
+                )
             )
         )
         return list_rov
+
     
     def created_activity(self, opening_reason: str, rov: str, checklist: str, site_name: str):
         headers = {
@@ -172,6 +181,16 @@ class CreatedActivityChildren:
             is_triage = self.verify_triage(item)
             checklist = self.verify_checklist(item, triage=is_triage)
 
+            insert_data_json(
+                id_activity=parent_id,
+                rov=item.get("ROV"),
+                status=item.get("STATUS"),
+                nome_site=item.get("NOME_SITE"),
+                sistema=item.get("SISTEMA"),
+                descricao=item.get("DESCRICAO"),
+                triagem=item
+            )
+            
             if parent_id is not None:
                 self.created_activity_children(
                     parent_id=parent_id,
@@ -185,3 +204,13 @@ class CreatedActivityChildren:
                     site_name=item["NOME_SITE"],
                     checklist=checklist,
                 )
+
+            # self.excel.append_info(
+            #     rov=item['ROV'],
+            #     status=item['STATUS'],
+            #     nome_site=item['NOME_SITE'],
+            #     sistema=item['SISTEMA'],
+            #     descricao=item['DESCRICAO'],
+            #     triagem=is_triage,
+            #     id_activity=parent_id
+            # )

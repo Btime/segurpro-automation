@@ -14,17 +14,10 @@ class FetchData:
 
                 response = requests.get(url)
 
-                # self.excel.create_excel()
-
                 if response.ok:
-                    dados = response.json()
-
-                    response = list(
-                        filter(
-                            lambda dado: dado.get('STATUS').startswith('EM ABERTO') and not dado.get('STATUS').startswith('EM ABERTO - RETORNO TECNICO'), dados
-                        )
-                    )
-                    return response
+                    data = response.json()
+                    
+                    return data
                 else:
                     raise 'Erro ao coletar dados'
                 
