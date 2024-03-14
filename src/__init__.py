@@ -9,12 +9,12 @@ def run():
     handle_created_activity = CreateActivityBtime(data=data)
     handle_created_activity_children = CreatedActivityChildren(data=data)
     threads = []
-    for _ in range(4):
+    for _ in range(1):
         thread = threading.Thread(target=handle_created_activity.run)
         threads.append(thread)
         thread.start()
 
-    for _ in range(4):
+    for _ in range(1):
         thread = threading.Thread(target=handle_created_activity_children.run)
         threads.append(thread)
         thread.start()

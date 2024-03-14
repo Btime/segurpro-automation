@@ -2,7 +2,7 @@ from openpyxl import Workbook
 
 class ExcelCollector:
     def __init__(self) -> None:
-        self.nome_excel = 'SERGURPRO_EM_ABERTO.xlsx'
+        self.excel_name = 'SERGURPRO_EM_ABERTO.xlsx'
 
     def create_excel(self):
         self.wb = Workbook()
@@ -16,4 +16,4 @@ class ExcelCollector:
         self.ws.append([id_activity, rov, status, nome_site, sistema, descricao, triagem])
 
     def save_excel(self):
-        self.wb.save(self.nome_excel)
+        self.wb.save(self.excel_name)

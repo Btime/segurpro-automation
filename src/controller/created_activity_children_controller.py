@@ -15,17 +15,17 @@ class CreatedActivityChildren:
     def get_rov_response(self, response):
         list_rov = list(
             map(
-                lambda dado: (
+                lambda data: (
                     {
-                        "ROV": dado.get("ROV"),    
-                        "SISTEMA": dado.get("SISTEMA"),
-                        "MOTIVO_ABERTURA": dado.get("MOTIVO_ABERTURA"),
-                        "NOME_SITE": dado.get("NOME_SITE"),
-                        "STATUS": dado.get("STATUS")   
+                        "ROV": data.get("ROV"),    
+                        "SISTEMA": data.get("SISTEMA"),
+                        "MOTIVO_ABERTURA": data.get("MOTIVO_ABERTURA"),
+                        "NOME_SITE": data.get("NOME_SITE"),
+                        "STATUS": data.get("STATUS")   
                     }
                 ),
                 filter(
-                    lambda dado: dado.get(
+                    lambda data: data.get(
                         'STATUS'
                     ).startswith(
                         'EM ABERTO - RETORNO TECNICO'
@@ -157,9 +157,9 @@ class CreatedActivityChildren:
     
     def verify_triage(self, data):
         opening_reason = data.get('MOTIVO_ABERTURA')
-        verify = bool(self.chatGPT.prompt(texto=opening_reason, triagem=True))
+        verification = bool(self.chatGPT.prompt(texto=opening_reason, triagem=True))
         
-        return verify
+        return verification
     
     def verify_checklist(self, data, triage = False):
         checklist = (
@@ -178,31 +178,31 @@ class CreatedActivityChildren:
     def run(self):
         
         data = self.get_rov_response(self.data)
-        for item in data:
-            parent_id = self.match_id_activity(item.get("ROV"))
-            is_triage = self.verify_triage(item)
-            checklist = self.verify_checklist(item, triage=is_triage)
+        for dado in data:
+            parent_id = self.match_id_activity(dado.get("ROV"))
+            is_triage = self.verify_triage(dado)
+            checklist = self.verify_checklist(dado, triage=is_triage)
             
             if parent_id is not None:
                 self.created_activity_children(
                     parent_id=parent_id,
-                    opening_reason=item.get("MOTIVO_ABERTURA"),
+                    opening_reason=dado.get("MOTIVO_ABERTURA"),
                     checklist=checklist
                 )
             else:
                 parent_id = self.created_activity(
-                    rov= item.get("ROV"),
-                    opening_reason=item.get("MOTIVO_ABERTURA"),
-                    site_name=item.get("NOME_SITE"),
+                    rov= dado.get("ROV"),
+                    opening_reason=dado.get("MOTIVO_ABERTURA"),
+                    site_name=dado.get("NOME_SITE"),
                     checklist=checklist,
                 )
             
             self.segurpro_repository.insert(
                 id_activity=parent_id,
-                rov=item["ROV"],
-                status=item["STATUS"],
-                site_name=item["NOME_SITE"],
-                system=item["SISTEMA"],
-                description=item["MOTIVO_ABERTURA"],
+                rov=dado["ROV"],
+                status=dado["STATUS"],
+                site_name=dado["NOME_SITE"],
+                system=dado["SISTEMA"],
+                description=dado["MOTIVO_ABERTURA"],
                 triage=is_triage
             )
