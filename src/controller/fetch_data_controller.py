@@ -1,6 +1,5 @@
 import requests
 from typing import Dict, Union
-from src.model.table_json_segurpro import create_table, table_exist
 
 
 
@@ -9,14 +8,10 @@ class FetchData:
             try:
                 url = 'https://us-central1-mse-digital.cloudfunctions.net/relatorioChamados'
 
-                if not table_exist():
-                    create_table()
-
                 response = requests.get(url)
 
                 if response.ok:
                     data = response.json()
-                    
                     return data
                 else:
                     raise 'Erro ao coletar dados'

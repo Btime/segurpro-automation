@@ -1,18 +1,19 @@
 import requests
 
-from src.model.table_json_segurpro import create_table, insert_data_json, table_exist
 from src.utils.excel_infos_json import ExcelCollector
 from src.utils.chatgpt_utils import ChatGPT
 from src.enum.sistema_enum import SistemaEnum
 from src.config.configuration import AUTHORIZATION
+from src.model.db.repository.segurpro_repository import SegurproRepository
+
 from typing import Dict, Union
 
 class CreateActivityBtime:
     def __init__(self, data) -> None:
+        self.data = data
         self.excel = ExcelCollector()
         self.chatGPT = ChatGPT()
-        self.data = data
-        self.excel.create_excel()
+        self.segurpro_repository = SegurproRepository()
 
     def filter_data(self):
         data = list(
@@ -50,24 +51,14 @@ class CreateActivityBtime:
             checklist = self.obtain_checklist(dado, triagem=triagem)
             activity_id = self.insert_data(dado, checklist)
             
-            insert_data_json(
-                activity_id,
-                rov=dado.get("ROV"),
-                status=dado.get("STATUS"),
-                nome_site=dado.get("NOME_SITE"),
-                sistema=dado.get("SISTEMA"),
-                descricao=dado.get("DESCRICAO"),
-                triagem=triagem
-            )
-            
-            self.excel.append_info(
+            self.segurpro_repository.insert(
                 id_activity=activity_id,
                 rov=dado.get("ROV"),
                 status=dado.get("STATUS"),
-                nome_site=dado.get("NOME_SITE"),
-                sistema=dado.get("SISTEMA"),
-                descricao=dado.get("DESCRICAO"), 
-                triagem=triagem
+                site_name=dado.get("NOME_SITE"),
+                system=dado.get("SISTEMA"),
+                description=dado.get("MOTIVO_ABERTURA"),
+                triage=triagem
             )
 
     def obtain_checklist(self, data: Dict[str, Union[str, int]], triagem: bool = False) -> int:
@@ -180,4 +171,3 @@ class CreateActivityBtime:
     def run(self):
         data = self.filter_data()
         self.export_data(data)
-        self.save_excel_file()

@@ -1,18 +1,18 @@
 import requests
-
-from src.model.table_json_segurpro import buscar_rov_json, insert_data_json
 from src.utils.chatgpt_utils import ChatGPT
 from src.utils.excel_infos_json import ExcelCollector
 from src.config.configuration import AUTHORIZATION
 from src.enum.sistema_enum import SistemaEnum
+from src.model.db.repository.segurpro_repository import SegurproRepository
 
 class CreatedActivityChildren:
     def __init__(self, data) -> None:
         self.chatGPT = ChatGPT()
         self.excel = ExcelCollector()
         self.data = data
+        self.segurpro_repository = SegurproRepository()
 
-    def __get_rov_response(self, response):
+    def get_rov_response(self, response):
         list_rov = list(
             map(
                 lambda dado: (
@@ -148,9 +148,11 @@ class CreatedActivityChildren:
             'query': 'mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n',
         }
         response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
-    
+        if response.ok:
+            return response.json()
+        
     def match_id_activity(self, rov):
-        results = buscar_rov_json(rov)
+        results = self.segurpro_repository.filter_by_rov(rov)
         return results
     
     def verify_triage(self, data):
@@ -175,42 +177,32 @@ class CreatedActivityChildren:
     
     def run(self):
         
-        data = self.__get_rov_response(self.data)
+        data = self.get_rov_response(self.data)
         for item in data:
-            parent_id = self.match_id_activity(item["ROV"])
+            parent_id = self.match_id_activity(item.get("ROV"))
             is_triage = self.verify_triage(item)
             checklist = self.verify_checklist(item, triage=is_triage)
-
-            insert_data_json(
-                id_activity=parent_id,
-                rov=item.get("ROV"),
-                status=item.get("STATUS"),
-                nome_site=item.get("NOME_SITE"),
-                sistema=item.get("SISTEMA"),
-                descricao=item.get("DESCRICAO"),
-                triagem=item
-            )
             
             if parent_id is not None:
                 self.created_activity_children(
                     parent_id=parent_id,
-                    opening_reason=item["MOTIVO_ABERTURA"],
+                    opening_reason=item.get("MOTIVO_ABERTURA"),
                     checklist=checklist
                 )
             else:
-                self.created_activity(
-                    rov= item["ROV"],
-                    opening_reason=item["MOTIVO_ABERTURA"],
-                    site_name=item["NOME_SITE"],
+                parent_id = self.created_activity(
+                    rov= item.get("ROV"),
+                    opening_reason=item.get("MOTIVO_ABERTURA"),
+                    site_name=item.get("NOME_SITE"),
                     checklist=checklist,
                 )
-
-            # self.excel.append_info(
-            #     rov=item['ROV'],
-            #     status=item['STATUS'],
-            #     nome_site=item['NOME_SITE'],
-            #     sistema=item['SISTEMA'],
-            #     descricao=item['DESCRICAO'],
-            #     triagem=is_triage,
-            #     id_activity=parent_id
-            # )
+            
+            self.segurpro_repository.insert(
+                id_activity=parent_id,
+                rov=item["ROV"],
+                status=item["STATUS"],
+                site_name=item["NOME_SITE"],
+                system=item["SISTEMA"],
+                description=item["MOTIVO_ABERTURA"],
+                triage=is_triage
+            )
