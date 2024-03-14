@@ -18,11 +18,11 @@ class CreateActivityBtime:
     def filter_data(self):
         data = list(
             filter(
-                lambda data: data.get(
+                lambda dado: dado.get(
                     'STATUS'
                 ).startswith(
                     'EM ABERTO'
-                ) and not data.get('STATUS').startswith('EM ABERTO - RETORNO TECNICO'), self.data
+                ) and not dado.get('STATUS').startswith('EM ABERTO - RETORNO TECNICO'), self.data
             )
         )
         return data
@@ -31,15 +31,24 @@ class CreateActivityBtime:
         return self.excel.save_excel()
 
     def verify_triage(self, data: Dict[str, Union[str, int]]):
-        opening_reason = data.get('MOTIVO_ABERTURA')
-        verification = bool(self.chatGPT.prompt(texto=opening_reason, triagem=True))
-        return verification
+        motivo_abertura = data.get('MOTIVO_ABERTURA')
+        verificacao = bool(self.chatGPT.prompt(texto=motivo_abertura, triagem=True))
+        return verificacao
 
 
     def export_data(self, data: Dict[str, Union[str, int]]) -> None:
+        """
+        Exports the given data to Btime and the JSON and Excel files.
+
+        Args:
+            data (Dict[str, Union[str, int]]): The data to be exported.
+
+        Returns:
+            None
+        """
         for dado in data:
-            triage = self.verify_triage(dado)
-            checklist = self.obtain_checklist(dado, triagem=triage)
+            triagem = self.verify_triage(dado)
+            checklist = self.obtain_checklist(dado, triagem=triagem)
             activity_id = self.insert_data(dado, checklist)
             
             self.segurpro_repository.insert(
@@ -49,7 +58,7 @@ class CreateActivityBtime:
                 site_name=dado.get("NOME_SITE"),
                 system=dado.get("SISTEMA"),
                 description=dado.get("MOTIVO_ABERTURA"),
-                triage=triage
+                triage=triagem
             )
 
     def obtain_checklist(self, data: Dict[str, Union[str, int]], triagem: bool = False) -> int:
@@ -77,7 +86,25 @@ class CreateActivityBtime:
         )
         return id_activity
     
-    def request_insert_btime(self, motivo_abertura: str, rov: str, checklist: str, nome_site: str) -> int:
+    def request_insert_btime(
+        self,
+        motivo_abertura: str,
+        rov: str,
+        checklist: str,
+        nome_site: str,
+    ) -> int:
+        """
+        Inserts a new activity in the Btime database and returns the activity ID.
+
+        Args:
+            motivo_abertura (str): The activity description.
+            rov (str): The ROV (Regional Operations Center).
+            checklist (str): The checklist ID.
+            nome_site (str): The site name.
+
+        Returns:
+            int: The activity ID.
+        """
         headers = {
             'authority': 'api.btime.io',
             'accept': '*/*',
@@ -140,7 +167,7 @@ class CreateActivityBtime:
             data = response.json()
 
             return data["data"]['upsertServiceOrder']['id']
-
+        
     def run(self):
         data = self.filter_data()
         self.export_data(data)

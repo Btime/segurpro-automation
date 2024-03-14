@@ -1,4 +1,5 @@
 import requests
+from src.utils.logs import Log
 from src.utils.chatgpt_utils import ChatGPT
 from src.utils.excel_infos_json import ExcelCollector
 from src.config.configuration import AUTHORIZATION
@@ -11,9 +12,10 @@ class CreatedActivityChildren:
         self.excel = ExcelCollector()
         self.data = data
         self.segurpro_repository = SegurproRepository()
+        self.log = Log()
 
     def get_rov_response(self, response):
-        list_rov = list(
+        data = list(
             map(
                 lambda data: (
                     {
@@ -33,7 +35,7 @@ class CreatedActivityChildren:
                 )
             )
         )
-        return list_rov
+        return data
 
     
     def created_activity(self, opening_reason: str, rov: str, checklist: str, site_name: str):
@@ -97,7 +99,6 @@ class CreatedActivityChildren:
         response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
         if response.ok:
             data = response.json()
-
             return data["data"]['upsertServiceOrder']['id']
 
     def created_activity_children(self, parent_id, checklist, opening_reason):
