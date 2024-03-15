@@ -16,7 +16,7 @@ class SegurproRepository:
                 """
                     CREATE TABLE IF NOT EXISTS tb_segurpro
                     (id INTEGER PRIMARY KEY, ID_ACTIVITY INTEGER, ROV INTEGER, ID_CHILDREN INTEGER,
-                    STATUS TEXT, SITE_NAME TEXT, SYSTEM TEXT, DESCRIPTION TEXT, TRIAGE INTEGER,
+                    STATUS_MSE TEXT, SITE_NAME TEXT, SYSTEM TEXT, OPENING_REASON TEXT, STATUS_BTIME TEXT, TRIAGE INTEGER,
                     CREATED_AT DATETIME)
                 """
             )
@@ -38,16 +38,17 @@ class SegurproRepository:
             data = db.session.query(Segurpro).all()
             return data
 
-    def insert(self, id_activity, rov, id_children, status, site_name, system, description, triage):
+    def insert(self, id_activity, rov, id_children, status_mse, site_name, system, opening_reason,status_btime, triage):
         with DBConnectionHandler() as db:
             data_insert = Segurpro(
                 id_activity = id_activity,
                 rov = rov,
                 id_children=id_children, 
-                status = status,
+                status_mse = status_mse,
                 site_name = site_name,
                 system = system,
-                description = description,
+                opening_reason = opening_reason,
+                status_btime = status_btime,
                 triage = triage,
                 created_at = date
             )

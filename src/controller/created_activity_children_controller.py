@@ -1,10 +1,12 @@
 import requests
-from src.utils.logs import Log
+from src.utils.logs import Log, log_wrapper
 from src.utils.chatgpt_utils import ChatGPT
 from src.utils.excel_infos_json import ExcelCollector
-from src.config.configuration import AUTHORIZATION
+from src.utils.time_utc import datetime_brasilia_format
+from src.utils.headers_utils import get_headers
 from src.enum.sistema_enum import SistemaEnum
 from src.model.db.repository.segurpro_repository import SegurproRepository
+
 
 class CreatedActivityChildren:
     def __init__(self, data) -> None:
@@ -13,234 +15,195 @@ class CreatedActivityChildren:
         self.excel = ExcelCollector()
         self.segurpro_repository = SegurproRepository()
         self.log = Log()
+        self.headers = get_headers()
 
-    def get_rov_response(self, response):
+    @log_wrapper
+    def filter_data(self, response):
         data = list(
             map(
                 lambda data: (
                     {
-                        "ROV": data.get("ROV"),    
+                        "ROV": data.get("ROV"),
                         "SISTEMA": data.get("SISTEMA"),
                         "MOTIVO_ABERTURA": data.get("MOTIVO_ABERTURA"),
                         "NOME_SITE": data.get("NOME_SITE"),
-                        "STATUS": data.get("STATUS")   
+                        "STATUS": data.get("STATUS"),
                     }
                 ),
                 filter(
-                    lambda data: data.get(
-                        'STATUS'
-                    ).startswith(
-                        'EM ABERTO - RETORNO TECNICO'
-                    ), response
-                )
+                    lambda data: data.get("STATUS").startswith(
+                        "EM ABERTO - RETORNO TECNICO"
+                    ),
+                    response,
+                ),
             )
         )
         return data
 
-    
-    def created_activity(self, opening_reason: str, rov: str, checklist: str, site_name: str):
-        headers = {
-            'authority': 'api.btime.io',
-            'accept': '*/*',
-            'accept-language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'authorization': AUTHORIZATION,
-            'content-type': 'application/json',
-            'origin': 'https://julia.btime.io',
-            'projectid': '1',
-            'referer': 'https://julia.btime.io/',
-            'requestid': 'oZe9oYkM3L',
-            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'workspace': 'julia',
-        }
+    def request_status_activity(self, id_activity):
+        data = (
+            '{"operationName":"Events","variables":{"serviceOrderIds":[%s]},"query":"query Events($serviceOrderIds: [Int]) {\\n events(filter: {serviceOrderIds: $serviceOrderIds}) {\\n id\\n eventDate\\n status {\\n id\\n name\\n color\\n __typename\\n }\\n reason {\\n id\\n name\\n __typename\\n }\\n description\\n user {\\n id\\n name\\n __typename\\n }\\n __typename\\n }\\n}\\n"}'
+            % id_activity
+        )
 
+        response = requests.post(
+            "https://api.btime.io/new/service-orders/api",
+            headers=self.headers,
+            data=data,
+        )
+        data = (
+            response.json()["data"]["events"][0]["status"]["id"]
+            if id_activity
+            else None
+        )
+
+        return data
+
+    @log_wrapper
+    def request_created_activity(
+        self, opening_reason: str, rov: str, checklist: str, site_name: str
+    ):
         json_data = {
-            'operationName': 'UpsertServiceOrder',
-            'variables': {
-                'input': {
-                    'userId': 11,
-                    'checklistId': checklist,
-                    'placeId': 19, # nome_site
-                    'assetId': None,
-                    'scheduling': '2024-03-15T19:44:00Z',
-                    'priorityId': 1,
-                    'address': {
-                        'address': None,
-                        'city': 'São Paulo',
-                        'state': 'São Paulo',
-                        'neighborhood': None,
-                        'country': 'Brasil',
-                        'number': None,
-                        'postcode': None,
-                        'latitude': -23.5557714,
-                        'longitude': -46.6395571,
-                        'search': 'São Paulo, SP, Brasil',
+            "operationName": "UpsertServiceOrder",
+            "variables": {
+                "input": {
+                    "userId": 11,
+                    "checklistId": checklist,
+                    "placeId": 19,  # nome_site
+                    "assetId": None,
+                    "scheduling": None,
+                    "priorityId": 1,
+                    "address": {
+                        "address": None,
+                        "city": "São Paulo",
+                        "state": "São Paulo",
+                        "neighborhood": None,
+                        "country": "Brasil",
+                        "number": None,
+                        "postcode": None,
+                        "latitude": -23.5557714,
+                        "longitude": -46.6395571,
+                        "search": "São Paulo, SP, Brasil",
                     },
-                    'description': self.chatGPT.prompt(opening_reason),
-                    'documents': [],
-                    'groupId': None,
-                    'events': [
+                    "description": self.chatGPT.prompt(opening_reason),
+                    "documents": [],
+                    "groupId": None,
+                    "events": [
                         {
-                            'statusId': 1,
-                            'eventDate': '2024-03-11T19:44:48Z',
+                            "statusId": 1,
+                            "eventDate": datetime_brasilia_format(),
                         },
                     ],
-                    'fieldValues': [],
+                    "fieldValues": [],
                 },
             },
-            'query': 'mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n',
+            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
         }
 
-        response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
+        response = requests.post(
+            "https://api.btime.io/new/service-orders/api",
+            headers=self.headers,
+            json=json_data,
+        )
+
+        self.log.info(data=response.json(), status_code=response.status_code)
+
         if response.ok:
             data = response.json()
-            return data["data"]['upsertServiceOrder']['id']
+            return data["data"]["upsertServiceOrder"]["id"]
 
-    def created_activity_children(self, parent_id, checklist, opening_reason):
-        headers = {
-            'authority': 'api.btime.io',
-            'accept': '*/*',
-            'accept-language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'authorization': AUTHORIZATION,
-            'content-type': 'application/json',
-            'origin': 'https://julia.btime.io',
-            'projectid': '1',
-            'referer': 'https://julia.btime.io/',
-            'requestid': 'H1rHDb1bRe',
-            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'workspace': 'julia',
-        }
+    @log_wrapper
+    def request_created_activity_children(self, parent_id, checklist, opening_reason):
         json_data = {
-            'operationName': 'UpsertServiceOrder',
-            'variables': {
-                'input': {
-                    'userId': 11,
-                    'checklistId': checklist,
-                    'placeId': 14,
-                    'assetId': None,
-                    'scheduling': None,
-                    'priorityId': None,
-                    'address': None,
-                    'description': self.chatGPT.prompt(opening_reason),
-                    'parentId': parent_id,
-                    'parentDependent': False,
-                    'documents': [],
-                    'groupId': None,
-                    'events': [
+            "operationName": "UpsertServiceOrder",
+            "variables": {
+                "input": {
+                    "userId": 11,
+                    "checklistId": checklist,
+                    "placeId": 14,
+                    "assetId": None,
+                    "scheduling": None,
+                    "priorityId": None,
+                    "address": None,
+                    "description": self.chatGPT.prompt(opening_reason),
+                    "parentId": parent_id,
+                    "parentDependent": False,
+                    "documents": [],
+                    "groupId": None,
+                    "events": [
                         {
-                            'statusId': 1,
-                            'eventDate': '2024-03-15T16:52:41Z',
+                            "statusId": 1,
+                            "eventDate": datetime_brasilia_format(),
                         },
                     ],
-                    'fieldValues': [],
+                    "fieldValues": [],
                 },
             },
-            'query': 'mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n',
+            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
         }
-        response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
-        if response.ok:
-            # return response.json()
-            data = response.json()
-            id_children = data["data"]['upsertServiceOrder']['id']
+        response = requests.post(
+            "https://api.btime.io/new/service-orders/api",
+            headers=self.headers,
+            json=json_data,
+        )
+        self.log.info(data=response.json(), status_code=response.status_code)
 
+        if response.ok:
+            data = response.json()
+            id_children = data["data"]["upsertServiceOrder"]["id"]
             return id_children
-        
-    def label_return(self, parent_id):
-        headers = {
-            'authority': 'api.btime.io',
-            'accept': '*/*',
-            'accept-language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'authorization': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGVJZCI6MSwid29ya3NwYWNlIjoianVsaWEiLCJhdWQiOiJKb2tlbiIsImV4cCI6MTc0MTg2OTg3OCwiaWF0IjoxNzEwMzMzODc4LCJpc3MiOiJKb2tlbiIsImp0aSI6IjJ1dTU3NmVmaThuaGFtanZxczBoNWMzaSIsIm5iZiI6MTcxMDMzMzg3OH0.xoaHmJ9Za3wzf_E5w0glOEbSiwfwIcz2zrLfY4GCXmE',
-            'content-type': 'application/json',
-            'origin': 'https://julia.btime.io',
-            'projectid': '1',
-            'referer': 'https://julia.btime.io/',
-            'requestid': '-0jLvWjc4N',
-            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'workspace': 'julia',
-        }
 
+    @log_wrapper
+    def request_get_status(self, parent_id):
         json_data = {
-            'operationName': 'ServiceOrders',
-            'variables': {
-                'page': 1,
-                'sort': {
-                    'field': 'ID',
-                    'type': 'ASC',
+            "operationName": "ServiceOrders",
+            "variables": {
+                "page": 1,
+                "sort": {
+                    "field": "ID",
+                    "type": "ASC",
                 },
-                'filter': {
-                    'parentIds': parent_id, # id_activity (id da atividade pai)
+                "filter": {
+                    "parentIds": parent_id,  # id_activity (id da atividade pai)
                 },
             },
-            'query': 'query ServiceOrders($page: Int, $search: String, $searchType: ServiceOrderSearchType, $sort: ServiceOrderSort, $filter: ServiceOrderFilter) {\n  serviceOrders(\n    page: $page\n    search: $search\n    searchType: $searchType\n    sort: $sort\n    filter: $filter\n  ) {\n    id\n    name\n    yearlyId\n    insertedAt\n    endDate\n    scheduling\n    childrenCount\n    priority {\n      id\n      name\n      __typename\n    }\n    status {\n      id\n      name\n      label\n      color\n      __typename\n    }\n    checklist {\n      id\n      name\n      __typename\n    }\n    place {\n      id\n      name\n      resume\n      __typename\n    }\n    asset {\n      id\n      name\n      type {\n        id\n        name\n        __typename\n      }\n      __typename\n    }\n    group {\n      id\n      name\n      __typename\n    }\n    user {\n      id\n      name\n      __typename\n    }\n    __typename\n  }\n}\n',
+            "query": "query ServiceOrders($page: Int, $search: String, $searchType: ServiceOrderSearchType, $sort: ServiceOrderSort, $filter: ServiceOrderFilter) {\n  serviceOrders(\n    page: $page\n    search: $search\n    searchType: $searchType\n    sort: $sort\n    filter: $filter\n  ) {\n    id\n    name\n    yearlyId\n    insertedAt\n    endDate\n    scheduling\n    childrenCount\n    priority {\n      id\n      name\n      __typename\n    }\n    status {\n      id\n      name\n      label\n      color\n      __typename\n    }\n    checklist {\n      id\n      name\n      __typename\n    }\n    place {\n      id\n      name\n      resume\n      __typename\n    }\n    asset {\n      id\n      name\n      type {\n        id\n        name\n        __typename\n      }\n      __typename\n    }\n    group {\n      id\n      name\n      __typename\n    }\n    user {\n      id\n      name\n      __typename\n    }\n    __typename\n  }\n}\n",
         }
 
-        response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
+        response = requests.post(
+            "https://api.btime.io/new/service-orders/api",
+            headers=self.headers,
+            json=json_data,
+        )
+        data = response.json()
 
-        status = response.json()
+        service_orders = data["data"]["serviceOrders"] if data else None
+        status = service_orders[-1]["status"]["id"] if service_orders else None
 
-        label_value = status['data']['serviceOrders'][-1]['status']['label']
-        print(f'Status: {label_value}')
+        status_id = [1, 2, 5, 6]
 
-        list_status = ['Aberta', 'Pausada', 'Execução', 'Recebida']
+        status_verified = True if status in status_id else False
 
-        if label_value in list_status:
-            return True
-        else:
-            return False
-        
-    def edit_activity_children(self, id_children, checklist, opening_reason):
-        headers = {
-            'authority': 'api.btime.io',
-            'accept': '*/*',
-            'accept-language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-            'authorization': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGVJZCI6MSwid29ya3NwYWNlIjoianVsaWEiLCJhdWQiOiJKb2tlbiIsImV4cCI6MTc0MTg2OTg3OCwiaWF0IjoxNzEwMzMzODc4LCJpc3MiOiJKb2tlbiIsImp0aSI6IjJ1dTU3NmVmaThuaGFtanZxczBoNWMzaSIsIm5iZiI6MTcxMDMzMzg3OH0.xoaHmJ9Za3wzf_E5w0glOEbSiwfwIcz2zrLfY4GCXmE',
-            'content-type': 'application/json',
-            'origin': 'https://julia.btime.io',
-            'projectid': '1',
-            'referer': 'https://julia.btime.io/',
-            'requestid': 'xpqaj3TVRf',
-            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'workspace': 'julia',
-        }
+        self.log.info(data=data, status=status, status_code=response.status_code)
 
+        return status_verified
+
+    @log_wrapper
+    def request_edit_activity(self, id):
         json_data = {
             'operationName': 'UpsertServiceOrder',
             'variables': {
                 'input': {
-                    'id': id_children,
+                    'id': id,
                     'name': None,
-                    'userId': 10,
-                    'checklistId': checklist,
-                    'placeId': 5,
+                    'userId': 11,
+                    'checklistId': 33,
+                    'placeId': 18,
                     'assetId': None,
                     'scheduling': None,
-                    'priorityId': None,
+                    'priorityId': 1,
                     'address': None,
-                    'description': opening_reason,
+                    'description': 'teste real funcionando',
                     'documents': [],
                     'groupId': None,
                     'fieldValues': [],
@@ -249,97 +212,316 @@ class CreatedActivityChildren:
             'query': 'mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n',
         }
 
-        response = requests.post('https://api.btime.io/new/service-orders/api', headers=headers, json=json_data)
+        response = requests.post('https://api.btime.io/new/service-orders/api', headers=self.headers, json=json_data)
 
+        print(response.status_code)
+
+        return response
+
+    @log_wrapper
+    def request_edit_activity_children(self, id_children, checklist, opening_reason):
+        json_data = {
+            "operationName": "UpsertServiceOrder",
+            "variables": {
+                "input": {
+                    "id": id_children,
+                    "name": None,
+                    "userId": 10,
+                    "checklistId": checklist,
+                    "placeId": 5,
+                    "assetId": None,
+                    "scheduling": None,
+                    "priorityId": None,
+                    "address": None,
+                    "description": opening_reason,
+                    "documents": [],
+                    "groupId": None,
+                    "fieldValues": [],
+                },
+            },
+            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
+        }
+
+        response = requests.post(
+            "https://api.btime.io/new/service-orders/api",
+            headers=self.headers,
+            json=json_data,
+        )
+
+        self.log.info(data=response.text, status_code=response.status_code)
+
+    @log_wrapper
+    def match_status_activity(self, rov):
+        results = self.segurpro_repository.filter_by_rov(rov)
+        results = results.status_btime if results else None
+
+        return results
+
+    @log_wrapper
     def match_id_activity(self, rov):
         results = self.segurpro_repository.filter_by_rov(rov)
         results = results.id_activity if results else None
 
         return results
-    
+
+    @log_wrapper
     def match_id_children(self, rov):
         results_children = self.segurpro_repository.filter_by_rov_children(rov)
         results_children = results_children.id_children if results_children else None
-
         return results_children
-    
+
+    @log_wrapper
+    def validate_status(self, status_btime_api: int, status_btime_db: str):
+        try:
+            status_btime_db = int(status_btime_db) if status_btime_db.isdigit() else status_btime_db
+            is_valid = True if status_btime_api == status_btime_db else False
+            return is_valid
+        except:
+            return False
+
+    @log_wrapper
     def verify_triage(self, data):
-        opening_reason = data.get('MOTIVO_ABERTURA')
+        opening_reason = data.get("MOTIVO_ABERTURA")
         verification = bool(self.chatGPT.prompt(texto=opening_reason, triagem=True))
-        
         return verification
-    
-    def verify_checklist(self, data, triage = False):
+
+    @log_wrapper
+    def verify_checklist(self, data, triage=False):
         checklist = (
             SistemaEnum.TRIAGEM.value
             if triage
             else next(
                 map(
-                    lambda s: s.value, 
-                    filter(lambda s: s.name  in (data.get('SISTEMA') or ""), SistemaEnum)
+                    lambda s: s.value,
+                    filter(
+                        lambda s: s.name in (data.get("SISTEMA") or ""), SistemaEnum
+                    ),
                 ),
-                SistemaEnum.DEFAULT.value
+                SistemaEnum.DEFAULT.value,
             )
         )
         return checklist
-    
-   
-    def run(self):
-        data = self.get_rov_response(self.data)
-        for dado in data:
-            rov = dado.get("ROV")
 
-            children_id = self.match_id_children(rov)
-            parent_id = self.match_id_activity(rov)
-            verification_status = self.label_return(parent_id)
+    @log_wrapper
+    def created_activity_children(
+        self,
+        parent_id,
+        children_id,
+        opening_reason,
+        checklist,
+        rov,
+        verification_status,
+        validate_status,
+    ):
+        if parent_id is not None and children_id is None and validate_status is True:
+            children_id = self.request_created_activity_children(
+                parent_id=parent_id, opening_reason=opening_reason, checklist=checklist
+            )
 
-            is_triage = self.verify_triage(dado)
-            checklist = self.verify_checklist(dado, triage=is_triage)
-            
-            if parent_id is not None and children_id is None:
-                children_id = self.created_activity_children(
+            self.segurpro_repository.update(
+                column="id_children",
+                id=parent_id,
+                value=children_id,
+            )
+
+            return children_id
+
+        elif parent_id is not None and children_id is not None and verification_status == False:
+            children_id = self.request_created_activity_children(
+                parent_id=parent_id, opening_reason=opening_reason, checklist=checklist
+            )
+
+            self.segurpro_repository.update(
+                column="id_children",
+                id=parent_id,
+                value=children_id,
+            )
+
+            return children_id
+        
+        elif parent_id is not None and children_id is None and validate_status == False:
+            children_id = self.request_created_activity_children(
+                parent_id=parent_id, opening_reason=opening_reason, checklist=checklist
+            )
+
+            self.segurpro_repository.update(
+                column="id_children",
+                id=parent_id,
+                value=children_id,
+            )
+
+            return children_id
+
+        return False
+
+    @log_wrapper
+    def edit_activity_children(
+        self,
+        children_id,
+        checklist,
+        opening_reason,
+        verification_status,
+        validate_status,
+        parent_id,
+    ):
+
+        if children_id is not None and verification_status:
+            self.request_edit_activity_children(
+                id_children=children_id,
+                checklist=checklist,
+                # opening_reason=opening_reason,
+                opening_reason="Testando pausada",
+            )
+
+            return True
+
+        if parent_id is not None and children_id is None and validate_status is False:
+            self.request_edit_activity(
+                id=parent_id,
+            )
+
+            return True
+
+        return False
+
+    @log_wrapper
+    def created_activity(
+        self,
+        opening_reason,
+        rov,
+        checklist,
+        site_name,
+        parent_id,
+        children_id,
+        status,
+        system,
+        triage,
+    ):
+
+        activity_id = self.request_created_activity(
+            opening_reason, rov, checklist, site_name
+        )
+
+        status_btime_api = self.request_status_activity(id_activity=activity_id)
+
+        self.segurpro_repository.insert(
+            id_activity=activity_id,
+            rov=rov,
+            id_children=children_id,
+            status_mse=status,
+            site_name=site_name,
+            system=system,
+            opening_reason=opening_reason,
+            status_btime=status_btime_api,
+            triage=triage,
+        )
+
+        return activity_id
+
+    @log_wrapper
+    def handle_process_activity(
+        self,
+        parent_id,
+        children_id,
+        checklist,
+        opening_reason,
+        verification_status,
+        rov,
+        status,
+        site_name,
+        system,
+        triage,
+        validate_status,
+    ):
+
+        created_activity_children = self.created_activity_children(
+            parent_id=parent_id,
+            children_id=children_id,
+            opening_reason=opening_reason,
+            checklist=checklist,
+            rov=rov,
+            verification_status=verification_status,
+            validate_status=validate_status,
+        )
+
+        edit_activity_children = self.edit_activity_children(
+            children_id=children_id,
+            checklist=checklist,
+            opening_reason=opening_reason,
+            verification_status=verification_status,
+            validate_status=validate_status,
+            parent_id=parent_id,
+        )
+
+        if not created_activity_children and not edit_activity_children:
+            if validate_status:
+                self.created_activity(
+                    opening_reason=opening_reason,
+                    rov=rov,
+                    checklist=checklist,
+                    site_name=site_name,
                     parent_id=parent_id,
-                    opening_reason=dado.get("MOTIVO_ABERTURA"),
-                    checklist=checklist
+                    children_id=children_id,
+                    status=status,
+                    system=system,
+                    triage=triage,
                 )
-
-                self.segurpro_repository.insert(
-                                id_activity=parent_id,
-                                rov=dado["ROV"],
-                                id_children=children_id,
-                                status=dado["STATUS"],
-                                site_name=dado["NOME_SITE"],
-                                system=dado["SISTEMA"],
-                                description=dado["MOTIVO_ABERTURA"],
-                                triage=is_triage
-                            )
-
-            elif children_id is not None and verification_status == True: # aberto = true
-                self.edit_activity_children(id_children=children_id,
-                    checklist=checklist,
-                    opening_reason=dado.get("MOTIVO_ABERTURA")
-                    # opening_reason="Testando a edição correta da descrição"
-                )
-
-                self.segurpro_repository.update('status', 1431, 'Abri')
-
             else:
-                parent_id = self.created_activity(
-                    rov= dado.get("ROV"),
-                    opening_reason=dado.get("MOTIVO_ABERTURA"),
-                    site_name=dado.get("NOME_SITE"),
+                self.edit_activity_children(
+                    children_id=parent_id,
                     checklist=checklist,
+                    opening_reason=opening_reason,
+                    verification_status=verification_status,
+                    validate_status=validate_status,
+                    parent_id=parent_id,
                 )
 
-                self.segurpro_repository.insert(
-                    id_activity=parent_id,
-                    rov=dado["ROV"],
-                    id_children=children_id,
-                    status=dado["STATUS"],
-                    site_name=dado["NOME_SITE"],
-                    system=dado["SISTEMA"],
-                    description=dado["MOTIVO_ABERTURA"],
-                    triage=is_triage
+    @log_wrapper
+    def handle_process(self):
+        try:
+            data = self.filter_data(self.data)
+            for item in data:
+                # variables
+                rov = item.get("ROV")
+                opening_reason = item.get("MOTIVO_ABERTURA")
+                status = item.get("STATUS")
+                site_name = item.get("NOME_SITE")
+                system = item.get("SISTEMA")
+
+                # validate if exists in database
+                children_id = self.match_id_children(rov)
+                parent_id = self.match_id_activity(rov)
+                status_btime_api = self.request_status_activity(id_activity=parent_id)
+                status_btime_db = self.match_status_activity(rov)
+
+                # Request return status
+                verification_status = self.request_get_status(parent_id)
+                validate_status = self.validate_status(
+                    status_btime_api=status_btime_api,
+                    status_btime_db=status_btime_db,
                 )
 
+                # validate
+                is_triage = self.verify_triage(item)
+                checklist = self.verify_checklist(item, triage=is_triage)
 
+                self.handle_process_activity(
+                    parent_id=parent_id,
+                    children_id=children_id,
+                    checklist=checklist,
+                    opening_reason=opening_reason,
+                    verification_status=verification_status,
+                    rov=rov,
+                    status=status,
+                    site_name=site_name,
+                    system=system,
+                    triage=is_triage,
+                    validate_status=validate_status,
+                )
+        except Exception as ex:
+            print(ex.__traceback__.tb_lineno)
+            raise ex
+            self.log.exception(ex)
+
+    def run(self):
+        self.handle_process()

@@ -48,6 +48,6 @@ def log_wrapper(func):
             logging.info(f"{method_name} completed successfully in {round(t1_stop-t1_start)} seconds")
             return result
         except Exception as ex:
-            pass
+            raise ex
     return wrapper
 
