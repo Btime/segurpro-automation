@@ -1,13 +1,12 @@
 import threading
-from src.controller.created_activity_controller import CreateActivityBtime
-from src.controller.created_activity_children_controller import CreatedActivityChildren
+from src.controller.activity_data_controller import ActivityDataController
 from src.controller.fetch_data_controller import FetchData
 
 def run():
     handle_fetch_data = FetchData()
     data = handle_fetch_data.fetch_data()
     # handle_created_activity = CreateActivityBtime(data=data)
-    handle_created_activity_children = CreatedActivityChildren(data=data)
+    handle_created_activity_children = ActivityDataController(data=data)
 
     threads = []
 

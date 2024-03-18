@@ -1,10 +1,8 @@
-import json
 import logging
 import os
 from datetime import datetime
 from time import perf_counter
-
-
+    
 class Log:
     def __init__(self):
         if not os.path.exists("./_logs/"):
@@ -12,28 +10,39 @@ class Log:
 
         self.timestamp = "{:%Y_%m_%d}".format(datetime.now())
         self.filename = './_logs/Log_{}.log'.format(self.timestamp)
-        logging.basicConfig(filename=self.filename, filemode="a", level=logging.INFO,
+        logging.basicConfig(filename=self.filename, filemode="a", level=logging.ERROR,
                             format='%(asctime)s: %(levelname)s: %(message)s')
         logging.getLogger("selenium").setLevel(logging.CRITICAL)
         logging.getLogger("selenium").propagate = False
+        logging.getLogger("requests").setLevel(logging.CRITICAL)
+        logging.getLogger("requests").propagate = False
+
+        logging.getLogger("requests.packages.urllib3").setLevel(logging.CRITICAL)
+        logging.getLogger("requests.packages.urllib3").propagate = False
+
         logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         logging.getLogger("urllib3").propagate = False
 
-        self.logger = logging.getLogger("main")
+        self.logger = logging.getLogger(__name__)
         
     def exception(self, **kwargs):
         message = dict()
         for k, v in zip(kwargs.keys(), kwargs.values()):
             message[k] = v
-        self.logger.error(message)
+            
+        with open(self.filename, 'a') as f:
+            f.write(f'{message}\n')
+
 
 
     def info(self,**kwargs):
         message = dict()
         for k, v in zip(kwargs.keys(), kwargs.values()):
+            v = 'Executada com sucesso ' + v if k == 'descricao' else v
             message[k] = v
-        self.logger.info(message)
-
+        
+        with open(self.filename, 'a') as f:
+            f.write(f'{message}\n')
 
 def log_wrapper(func):
     def wrapper(*args, **kwargs):
