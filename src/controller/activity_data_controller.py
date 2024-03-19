@@ -25,7 +25,7 @@ class ActivityDataController:
                         "SISTEMA": data.get("SISTEMA"),
                         "ENDERECO": data.get("ENDERECO"),
                         "BAIRRO": data.get("BAIRRO"),
-                        "city": data.get("city"),
+                        "MUNICIPIO": data.get("MUNICIPIO"),
                         "MOTIVO_ABERTURA": data.get("MOTIVO_ABERTURA"),
                         "NOME_SITE": data.get("NOME_SITE"),
                         "STATUS": data.get("STATUS"),
@@ -703,7 +703,6 @@ class ActivityDataController:
                 address = item.get("ENDERECO")
                 neighborhood = item.get("BAIRRO")
                 city = item.get("MUNICIPIO")
-                rov = item.get("ROV")
                 opening_reason = item.get("MOTIVO_ABERTURA")
                 status = item.get("STATUS")
                 site_name = item.get("NOME_SITE")
