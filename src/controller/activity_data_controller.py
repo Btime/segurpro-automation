@@ -7,6 +7,7 @@ from src.enum.sistema_enum import SistemaEnum
 from src.model.db.repository.segurpro_repository import SegurproRepository
 from src.config.configuration import STATUS_OPEN
 
+
 class ActivityDataController:
     def __init__(self, data) -> None:
         self.data = data
@@ -24,11 +25,11 @@ class ActivityDataController:
                         "SISTEMA": data.get("SISTEMA"),
                         "ENDERECO": data.get("ENDERECO"),
                         "BAIRRO": data.get("BAIRRO"),
-                        "MUNICIPIO": data.get("MUNICIPIO"),
+                        "city": data.get("city"),
                         "MOTIVO_ABERTURA": data.get("MOTIVO_ABERTURA"),
                         "NOME_SITE": data.get("NOME_SITE"),
                         "STATUS": data.get("STATUS"),
-                        "MOTIVO_REPROVA_EPS": data.get("MOTIVO_REPROVA_EPS")
+                        "MOTIVO_REPROVA_EPS": data.get("MOTIVO_REPROVA_EPS"),
                     }
                 ),
                 filter(
@@ -70,17 +71,17 @@ class ActivityDataController:
         return status_verified
 
     def request_created_activity(
-            self,
-            opening_reason, 
-            rov, 
-            checklist, 
-            site_name, 
-            recused_reason, 
-            address,
-            neiborhood,
-            municipio
-        ):
-        
+        self,
+        address,
+        checklist,
+        city,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        rov,
+        site_name,
+    ):
+
         json_data = {
             "operationName": "UpsertServiceOrder",
             "variables": {
@@ -103,7 +104,14 @@ class ActivityDataController:
                         "longitude": -46.6395571,
                         "search": "São Paulo, SP, Brasil",
                     },
-                    "description": self.chatGPT.prompt(opening_reason, address, neiborhood, municipio, site_name) + '\n\n ## Motivo Reprova:\n\n' + recused_reason,
+                    "description": self.chatGPT.prompt(
+                        address=address,
+                        city=city,
+                        neighborhood=neighborhood,
+                        opening_reason=opening_reason,
+                        site_name=site_name,
+                        recused_reason=recused_reason,
+                    ),
                     "documents": [],
                     "groupId": None,
                     "events": [
@@ -135,17 +143,17 @@ class ActivityDataController:
             return data["data"]["upsertServiceOrder"]["id"]
 
     def request_created_activity_children(
-            self, 
-            id_activity, 
-            checklist, 
-            opening_reason, 
-            site_name, 
-            recused_reason, 
-            address, 
-            neiborhood, 
-            municipio
-        ):
-        
+        self,
+        address,
+        checklist,
+        city,
+        id_activity,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        site_name,
+    ):
+
         json_data = {
             "operationName": "UpsertServiceOrder",
             "variables": {
@@ -157,7 +165,14 @@ class ActivityDataController:
                     "scheduling": None,
                     "priorityId": None,
                     "address": None,
-                    "description":  self.chatGPT.prompt(opening_reason, address, neiborhood, municipio, site_name) + '\n\n ## Motivo Reprova:\n\n' + recused_reason,
+                    "description": self.chatGPT.prompt(
+                        address=address,
+                        city=city,
+                        neighborhood=neighborhood,
+                        opening_reason=opening_reason,
+                        site_name=site_name,
+                        recused_reason=recused_reason,
+                    ),
                     "parentId": id_activity,
                     "parentDependent": False,
                     "documents": [],
@@ -230,7 +245,17 @@ class ActivityDataController:
 
         return status_verified
 
-    def request_edit_activity(self, id, checklist, opening_reason, recused_reason, address, neiborhood, municipio, site_name):
+    def request_edit_activity(
+        self,
+        address,
+        checklist,
+        city,
+        id,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        site_name,
+    ):
         json_data = {
             "operationName": "UpsertServiceOrder",
             "variables": {
@@ -244,7 +269,14 @@ class ActivityDataController:
                     "scheduling": None,
                     "priorityId": 1,
                     "address": None,
-                    "description": self.chatGPT.prompt(opening_reason, address, neiborhood, municipio, site_name) + '\n\n ## Motivo Reprova:\n\n' + recused_reason,
+                    "description": self.chatGPT.prompt(
+                        address=address,
+                        city=city,
+                        neighborhood=neighborhood,
+                        opening_reason=opening_reason,
+                        site_name=site_name,
+                        recused_reason=recused_reason,
+                    ),
                     "documents": [],
                     "groupId": None,
                     "fieldValues": [],
@@ -267,7 +299,17 @@ class ActivityDataController:
 
         return response
 
-    def request_edit_activity_children(self, id_children, checklist, opening_reason, recused_reason, address, neiborhood, municipio, site_name):
+    def request_edit_activity_children(
+        self,
+        address,
+        checklist,
+        city,
+        id_children,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        site_name,
+    ):
         json_data = {
             "operationName": "UpsertServiceOrder",
             "variables": {
@@ -281,7 +323,14 @@ class ActivityDataController:
                     "scheduling": None,
                     "priorityId": None,
                     "address": None,
-                    "description": self.chatGPT.prompt(opening_reason, address, neiborhood, municipio, site_name) + '\n\n ## Motivo Reprova:\n\n' + recused_reason,
+                    "description": self.chatGPT.prompt(
+                        address=address,
+                        city=city,
+                        neighborhood=neighborhood,
+                        opening_reason=opening_reason,
+                        site_name=site_name,
+                        recused_reason=recused_reason,
+                    ),
                     "documents": [],
                     "groupId": None,
                     "fieldValues": [],
@@ -329,9 +378,26 @@ class ActivityDataController:
         except:
             return None
 
-    def verify_triage(self, data):
-        opening_reason = data.get("MOTIVO_ABERTURA")
-        verification = bool(self.chatGPT.prompt(address=data.get("ENDERECO") ,neiborhood=data.get("BAIRRO"), municipio=data.get("MUNICIPIO"),site_name=data.get("NOME_SITE") ,texto=opening_reason, triagem=True))
+    def verify_triage(
+        self,
+        address,
+        city,
+        neighborhood,
+        site_name,
+        recused_reason,
+        opening_reason,
+    ):
+        verification = bool(
+            self.chatGPT.prompt(
+                address=address,
+                city=city,
+                neighborhood=neighborhood,
+                opening_reason=opening_reason,
+                recused_reason=recused_reason,
+                site_name=site_name,
+                triagem=True,
+            )
+        )
         return verification
 
     def verify_checklist(self, data, triage=False):
@@ -352,75 +418,80 @@ class ActivityDataController:
 
     def created_activity(
         self,
-        opening_reason,
-        rov,
+        address,
         checklist,
-        site_name,
-        id_activity,
         children_id,
+        city,
+        id_activity,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        rov,
+        site_name,
         status,
         system,
         triage,
-        recused_reason,
-        address,
-        neiborhood,
-        municipio
     ):
 
-        # Criar atividade
-        activity_id = self.request_created_activity(
-            opening_reason,
-            rov, 
-            checklist, 
-            site_name, 
-            recused_reason, 
-            address,
-            neiborhood,
-            municipio
-        )
+        try:
+            # Criar atividade
+            activity_id = self.request_created_activity(
+                address=address,
+                checklist=checklist,
+                city=city,
+                neighborhood=neighborhood,
+                opening_reason=opening_reason,
+                recused_reason=recused_reason,
+                rov=rov,
+                site_name=site_name,
+            )
 
-        # Checar status na plataforma Btime
-        status_btime_api = self.request_status_activity(id_activity=activity_id)
+            # Checar status na plataforma Btime
+            status_btime_api = self.request_status_activity(id_activity=activity_id)
 
-        # Inserir dados no banco de dados
-        self.segurpro_repository.insert(
-            id_activity=activity_id,
-            rov=rov,
-            id_children=children_id,
-            status_mse=status,
-            site_name=site_name,
-            system=system,
-            opening_reason=opening_reason,
-            status_btime=status_btime_api,
-            triage=triage,
-        )
+            # Inserir dados no banco de dados
+            self.segurpro_repository.insert(
+                id_activity=activity_id,
+                id_children=children_id,
+                opening_reason=opening_reason,
+                site_name=site_name,
+                status_btime=status_btime_api,
+                status_mse=status,
+                system=system,
+                rov=rov,
+                triage=triage,
+            )
 
-        return activity_id
+            return activity_id
+        except Exception as e:
+            print(e.__traceback__.tb_lineno)
+            print(e)
 
     def edit_activity(
-            self, 
-            id_activity, 
-            children_id, 
-            validate_status_father, 
-            checklist,
-            opening_reason, 
-            recused_reason,
-            address,
-            neiborhood,
-            municipio,
-            site_name):
+        self,
+        address,
+        checklist,
+        children_id,
+        city,
+        id_activity,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        site_name,
+        validate_status_father,
+    ):
 
         # Se id da atividade pai existir e a atividade filha não existir e o status da atividade pai retornar false, então edita a atividade pai existente
         if id_activity is not None and validate_status_father is True:
             self.request_edit_activity(
-                id=id_activity,
+                address=address,
                 checklist=checklist,
+                city=city,
+                id=id_activity,
+                neighborhood=neighborhood,
                 opening_reason=opening_reason,
                 recused_reason=recused_reason,
                 site_name=site_name,
-                address=address,
-                neiborhood=neiborhood,
-                municipio=municipio
             )
 
             return True
@@ -428,18 +499,18 @@ class ActivityDataController:
 
     def created_activity_children(
         self,
-        id_activity,
-        children_id,
-        opening_reason,
+        address,
         checklist,
-        site_name,
+        children_id,
+        city,
+        id_activity,
+        neighborhood,
+        opening_reason,
+        recused_reason,
         rov,
+        site_name,
         validate_status_children,
         validate_status_father,
-        recused_reason,
-        address,
-        neiborhood,
-        municipio
     ):
 
         # Se existir o id pai e não existir a id filha e o status da pai retornar False (fechado) então cria uma nova atividade
@@ -449,14 +520,14 @@ class ActivityDataController:
             and validate_status_father is False
         ):
             children_id = self.request_created_activity_children(
-                id_activity=id_activity,
-                opening_reason=opening_reason,
-                checklist=checklist,
-                recused_reason=recused_reason,
                 address=address,
-                neiborhood=neiborhood,
-                municipio=municipio,
-                site_name=site_name
+                checklist=checklist,
+                city=city,
+                id_activity=id_activity,
+                neighborhood=neighborhood,
+                opening_reason=opening_reason,
+                recused_reason=recused_reason,
+                site_name=site_name,
             )
 
             self.segurpro_repository.update(
@@ -474,14 +545,14 @@ class ActivityDataController:
             and validate_status_children == False
         ):
             children_id = self.request_created_activity_children(
-                id_activity=id_activity,
-                opening_reason=opening_reason,
-                checklist=checklist,
-                recused_reason=recused_reason,
                 address=address,
-                neiborhood=neiborhood,
-                municipio=municipio,
-                site_name=site_name
+                checklist=checklist,
+                city=city,
+                id_activity=id_activity,
+                neighborhood=neighborhood,
+                opening_reason=opening_reason,
+                recused_reason=recused_reason,
+                site_name=site_name,
             )
 
             self.segurpro_repository.update(
@@ -496,30 +567,30 @@ class ActivityDataController:
 
     def edit_activity_children(
         self,
-        children_id,
+        address,
         checklist,
+        children_id,
+        city,
+        id_activity,
+        neighborhood,
         opening_reason,
+        recused_reason,
+        site_name,
         validate_status_children,
         validate_status_father,
-        id_activity,
-        recused_reason,
-        address,
-        neiborhood,
-        municipio,
-        site_name
     ):
 
         # Se id da atividade filha existir e o status retornar true (id 1,2 5 ou 6) então edita a atividade já existente
         if children_id is not None and validate_status_children:
             self.request_edit_activity_children(
-                id_children=children_id,
+                address=address,
                 checklist=checklist,
+                city=city,
+                id_children=children_id,
+                neighborhood=neighborhood,
                 opening_reason=opening_reason,
                 recused_reason=recused_reason,
-                address=address,
-                neiborhood=neiborhood,
-                municipio=municipio,
-                site_name=site_name
+                site_name=site_name,
             )
 
             return True
@@ -527,64 +598,64 @@ class ActivityDataController:
         return False
 
     def handle_process_activity(
-            self,
-            id_activity,
-            children_id,
-            checklist,
-            opening_reason,
-            validate_status_children,
-            rov,
-            status,
-            site_name,
-            system,
-            triage,
-            validate_status_father,
-            recused_reason,
-            address,
-            neiborhood,
-            municipio
-        ):
+        self,
+        address,
+        checklist,
+        children_id,
+        city,
+        id_activity,
+        neighborhood,
+        opening_reason,
+        recused_reason,
+        rov,
+        site_name,
+        status,
+        system,
+        triage,
+        validate_status_children,
+        validate_status_father,
+    ):
 
         edit_activity = self.edit_activity(
-            id_activity=id_activity,
-            children_id=children_id,
-            validate_status_father=validate_status_father, 
+            address=address,
             checklist=checklist,
+            children_id=children_id,
+            city=city,
+            id_activity=id_activity,
+            neighborhood=neighborhood,
             opening_reason=opening_reason,
             recused_reason=recused_reason,
-            address=address,
-            neiborhood=neiborhood,
-            municipio=municipio,
-            site_name=site_name
+            site_name=site_name,
+            validate_status_father=validate_status_father,
         )
 
         created_activity_children = self.created_activity_children(
-            id_activity=id_activity,
-            children_id=children_id,
-            opening_reason=opening_reason,
+            address=address,
             checklist=checklist,
+            children_id=children_id,
+            city=city,
+            id_activity=id_activity,
+            neighborhood=neighborhood,
+            opening_reason=opening_reason,
+            recused_reason=recused_reason,
             rov=rov,
+            site_name=site_name,
             validate_status_children=validate_status_children,
             validate_status_father=validate_status_father,
-            recused_reason=recused_reason,
-            address=address,
-            neiborhood=neiborhood,
-            municipio=municipio,
-            site_name=site_name
         )
 
         edit_activity_children = self.edit_activity_children(
-            children_id=children_id,
+            address=address,
             checklist=checklist,
+            children_id=children_id,
+            city=city,
+            id_activity=id_activity,
+            neighborhood=neighborhood,
             opening_reason=opening_reason,
+            recused_reason=recused_reason,
+            site_name=site_name,
             validate_status_children=validate_status_children,
             validate_status_father=validate_status_father,
-            id_activity=id_activity,
-            recused_reason=recused_reason,
-            address=address,
-            neiborhood=neiborhood,
-            municipio=municipio,
-            site_name=site_name
         )
 
         if (
@@ -594,51 +665,50 @@ class ActivityDataController:
         ):
             if validate_status_father == None:
                 self.created_activity(
-                    opening_reason=opening_reason,
-                    rov=rov,
+                    address=address,
                     checklist=checklist,
-                    site_name=site_name,
-                    id_activity=id_activity,
                     children_id=children_id,
+                    city=city,
+                    id_activity=id_activity,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    rov=rov,
+                    site_name=site_name,
                     status=status,
                     system=system,
                     triage=triage,
-                    recused_reason=recused_reason,
-                    address=address,
-                    neiborhood=neiborhood,
-                    municipio=municipio
-                    )   
+                )
             else:
                 self.edit_activity_children(
-                    children_id=id_activity,
+                    address=address,
                     checklist=checklist,
+                    children_id=id_activity,
+                    city=city,
+                    id_activity=id_activity,
+                    neighborhood=neighborhood,
                     opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
                     validate_status_children=validate_status_children,
                     validate_status_father=validate_status_father,
-                    id_activity=id_activity,
-                    recused_reason=recused_reason,
-                    address=address,
-                    neiborhood=neiborhood,
-                    municipio=municipio,
-                    site_name=site_name
                 )
 
-    def handle_process(self):
+    def run(self):
         try:
             data = self.filter_data(self.data)
             for item in data:
                 # variables
                 rov = item.get("ROV")
                 address = item.get("ENDERECO")
-                neiborhood = item.get("BAIRRO")
-                municipio = item.get("MUNICIPIO")
+                neighborhood = item.get("BAIRRO")
+                city = item.get("MUNICIPIO")
                 rov = item.get("ROV")
                 opening_reason = item.get("MOTIVO_ABERTURA")
                 status = item.get("STATUS")
                 site_name = item.get("NOME_SITE")
                 system = item.get("SISTEMA")
                 recused_reason = item.get("MOTIVO_REPROVA_EPS")
-
 
                 # validate if exists in database
                 children_id = self.match_id_children(rov)
@@ -656,30 +726,36 @@ class ActivityDataController:
                 )
 
                 # validate
-                is_triage = self.verify_triage(item)
+                address = address
+                is_triage = self.verify_triage(
+                    address=address,
+                    city=city,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
+                )
                 checklist = self.verify_checklist(item, triage=is_triage)
 
                 self.handle_process_activity(
-                    id_activity=id_activity,
+                    address=address,
                     children_id=children_id,
                     checklist=checklist,
+                    city=city,
+                    id_activity=id_activity,
+                    neighborhood=neighborhood,
                     opening_reason=opening_reason,
-                    validate_status_children=validate_status_children,
+                    recused_reason=recused_reason,
                     rov=rov,
-                    status=status,
                     site_name=site_name,
+                    status=status,
                     system=system,
                     triage=is_triage,
+                    validate_status_children=validate_status_children,
                     validate_status_father=validate_status_father,
-                    recused_reason=recused_reason,
-                    address=address,
-                    neiborhood=neiborhood,
-                    municipio=municipio
                 )
+
         except Exception as ex:
             print(ex.__traceback__.tb_lineno)
             self.log.exception(error=ex)
             raise ex
-
-    def run(self):
-        self.handle_process()
