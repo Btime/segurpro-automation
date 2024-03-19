@@ -9,6 +9,8 @@
 *.csv
 *.xlsx
 *.db
+.env
+*.env
 __pycache__/
 local_settings.py
 media
