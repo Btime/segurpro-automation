@@ -4,12 +4,13 @@ from src.model.db.entities.segurpro import Segurpro
 from sqlalchemy import text, update
 from src.model.db.configs.base import Base
 
-date = datetime.now()
+
 
 class SegurproRepository:
     def __init__(self) -> None:
         self.create_table()        
-    
+        self.date = datetime.now()
+
     def create_table(self):
         with DBConnectionHandler() as db:
             query = text(
@@ -33,6 +34,11 @@ class SegurproRepository:
             data = db.session.query(Segurpro).filter(Segurpro.rov == rov).order_by(Segurpro.id.desc()).first()
             return data
 
+    def filter_by_id_activity(self, id_activity):
+        with DBConnectionHandler() as db:
+            data = db.session.query(Segurpro).filter(Segurpro.id_activity == id_activity).order_by(Segurpro.id.desc()).first()
+            return data
+
     def select(self):
         with DBConnectionHandler() as db:
             data = db.session.query(Segurpro).all()
@@ -50,7 +56,7 @@ class SegurproRepository:
                 opening_reason = opening_reason,
                 status_btime = status_btime,
                 triage = triage,
-                created_at = date
+                created_at = self.date
             )
             db.session.add(data_insert)
             db.session.commit()

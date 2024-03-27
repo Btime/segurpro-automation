@@ -33,42 +33,60 @@ class ActivityDataController:
                     }
                 ),
                 filter(
-                    lambda data: data.get("STATUS").startswith("EM ABERTO"),
+                    lambda data: data.get("STATUS").startswith("EM ABERTO -"),
                     response,
                 ),
             )
         )
+
         return data
 
+    def validation_opening_reason_api_db(self, id_activity, opening_reason):
+        validation = self.segurpro_repository.filter_by_id_activity(id_activity)
+        validation = False if validation.opening_reason == opening_reason else True
+
+        return validation
+
     def request_status_activity(self, id_activity):
-        data = (
-            '{"operationName":"Events","variables":{"serviceOrderIds":[%s]},"query":"query Events($serviceOrderIds: [Int]) {\\n events(filter: {serviceOrderIds: $serviceOrderIds}) {\\n id\\n eventDate\\n status {\\n id\\n name\\n color\\n __typename\\n }\\n reason {\\n id\\n name\\n __typename\\n }\\n description\\n user {\\n id\\n name\\n __typename\\n }\\n __typename\\n }\\n}\\n"}'
-            % id_activity
-        )
+        try:
+            data = (
+                '{"operationName":"Events","variables":{"serviceOrderIds":[%s]},"query":"query Events($serviceOrderIds: [Int]) {\\n events(filter: {serviceOrderIds: $serviceOrderIds}) {\\n id\\n eventDate\\n status {\\n id\\n name\\n color\\n __typename\\n }\\n reason {\\n id\\n name\\n __typename\\n }\\n description\\n user {\\n id\\n name\\n __typename\\n }\\n __typename\\n }\\n}\\n"}'
+                % id_activity
+            )
 
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            data=data,
-        )
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                data=data,
+            )
 
-        data = (
-            response.json()["data"]["events"][0]["status"]["id"]
-            if id_activity
-            else None
-        )
+            data = (
+                response.json()["data"]["events"][0]["status"]["id"]
+                if id_activity
+                else None
+            )
 
-        status_id = STATUS_OPEN
+            status_id = STATUS_OPEN
 
-        status_verified = None if data is None else True if data in status_id else False
+            status_verified = (
+                None if data is None else True if data in status_id else False
+            )
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_status_activity.__name__}. Status da Atividade Pai validado.",
-            data={response.content},
-        )
+            if data is not None:
+                self.log.info(
+                    status_code=response.status_code,
+                    descricao=f"{self.request_status_activity.__name__}. Status da Atividade Pai validado.",
+                    data={response.content},
+                )
 
-        return status_verified
+            return status_verified
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_status_activity.__name__}. Erro ao validar o Status da Atividade Pai. {e}",
+                data={response.content},
+            )
 
     def request_created_activity(
         self,
@@ -82,65 +100,74 @@ class ActivityDataController:
         site_name,
     ):
 
-        json_data = {
-            "operationName": "UpsertServiceOrder",
-            "variables": {
-                "input": {
-                    "userId": 11,
-                    "checklistId": checklist,
-                    "placeId": 19,  # nome_site
-                    "assetId": None,
-                    "scheduling": None,
-                    "priorityId": 1,
-                    "address": {
-                        "address": None,
-                        "city": "São Paulo",
-                        "state": "São Paulo",
-                        "neighborhood": None,
-                        "country": "Brasil",
-                        "number": None,
-                        "postcode": None,
-                        "latitude": -23.5557714,
-                        "longitude": -46.6395571,
-                        "search": "São Paulo, SP, Brasil",
-                    },
-                    "description": self.chatGPT.prompt(
-                        address=address,
-                        city=city,
-                        neighborhood=neighborhood,
-                        opening_reason=opening_reason,
-                        site_name=site_name,
-                        recused_reason=recused_reason,
-                    ),
-                    "documents": [],
-                    "groupId": None,
-                    "events": [
-                        {
-                            "statusId": 1,
-                            "eventDate": datetime_brasilia_format(),
+        try:
+            json_data = {
+                "operationName": "UpsertServiceOrder",
+                "variables": {
+                    "input": {
+                        "userId": 11,
+                        "checklistId": checklist,
+                        "placeId": 19,  # nome_site
+                        "assetId": None,
+                        "scheduling": None,
+                        "priorityId": 1,
+                        "address": {
+                            "address": None,
+                            "city": "São Paulo",
+                            "state": "São Paulo",
+                            "neighborhood": None,
+                            "country": "Brasil",
+                            "number": None,
+                            "postcode": None,
+                            "latitude": -23.5557714,
+                            "longitude": -46.6395571,
+                            "search": "São Paulo, SP, Brasil",
                         },
-                    ],
-                    "fieldValues": [],
+                        "description": self.chatGPT.prompt(
+                            address=address,
+                            city=city,
+                            neighborhood=neighborhood,
+                            opening_reason=opening_reason,
+                            site_name=site_name,
+                            recused_reason=recused_reason,
+                        ),
+                        "documents": [],
+                        "groupId": None,
+                        "events": [
+                            {
+                                "statusId": 1,
+                                "eventDate": datetime_brasilia_format(),
+                            },
+                        ],
+                        "fieldValues": [],
+                    },
                 },
-            },
-            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
-        }
+                "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
+            }
 
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            json=json_data,
-        )
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                json=json_data,
+            )
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_created_activity.__name__} . Atividade Pai criada.",
-            data={response.content},
-        )
+            self.log.info(
+                status_code=response.status_code,
+                descricao=f"{self.request_created_activity.__name__} . Atividade Pai criada.",
+                data={response.content},
+            )
 
-        if response.ok:
-            data = response.json()
-            return data["data"]["upsertServiceOrder"]["id"]
+            if response.ok:
+                data = response.json()
+
+                return data["data"]["upsertServiceOrder"]["id"]   
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_created_activity.__name__}. Erro ao criar Atividade Pai. {e}",
+                data={response.content},
+            )
 
     def request_created_activity_children(
         self,
@@ -154,96 +181,115 @@ class ActivityDataController:
         site_name,
     ):
 
-        json_data = {
-            "operationName": "UpsertServiceOrder",
-            "variables": {
-                "input": {
-                    "userId": 11,
-                    "checklistId": checklist,
-                    "placeId": 14,
-                    "assetId": None,
-                    "scheduling": None,
-                    "priorityId": None,
-                    "address": None,
-                    "description": self.chatGPT.prompt(
-                        address=address,
-                        city=city,
-                        neighborhood=neighborhood,
-                        opening_reason=opening_reason,
-                        site_name=site_name,
-                        recused_reason=recused_reason,
-                    ),
-                    "parentId": id_activity,
-                    "parentDependent": False,
-                    "documents": [],
-                    "groupId": None,
-                    "events": [
-                        {
-                            "statusId": 1,
-                            "eventDate": datetime_brasilia_format(),
-                        },
-                    ],
-                    "fieldValues": [],
+        try:
+            json_data = {
+                "operationName": "UpsertServiceOrder",
+                "variables": {
+                    "input": {
+                        "userId": 11,
+                        "checklistId": checklist,
+                        "placeId": 14,
+                        "assetId": None,
+                        "scheduling": None,
+                        "priorityId": None,
+                        "address": None,
+                        "description": self.chatGPT.prompt(
+                            address=address,
+                            city=city,
+                            neighborhood=neighborhood,
+                            opening_reason=opening_reason,
+                            site_name=site_name,
+                            recused_reason=recused_reason,
+                        ),
+                        "parentId": id_activity,
+                        "parentDependent": False,
+                        "documents": [],
+                        "groupId": None,
+                        "events": [
+                            {
+                                "statusId": 1,
+                                "eventDate": datetime_brasilia_format(),
+                            },
+                        ],
+                        "fieldValues": [],
+                    },
                 },
-            },
-            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
-        }
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            json=json_data,
-        )
+                "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
+            }
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                json=json_data,
+            )
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_created_activity_children.__name__} . Atividade Filha criada.",
-            data={response.content},
-        )
+            self.log.info(
+                status_code=response.status_code,
+                descricao=f"{self.request_created_activity_children.__name__} . Atividade Filha criada.",
+                data={response.content},
+            )
 
-        if response.ok:
-            data = response.json()
-            id_children = data["data"]["upsertServiceOrder"]["id"]
-            return id_children
+            if response.ok:
+                data = response.json()
+                id_children = data["data"]["upsertServiceOrder"]["id"]
+
+                return id_children
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_created_activity_children.__name__}. Erro ao criar Atividade Filha. {e}",
+                data={response.content},
+            )
 
     def request_status_activity_children(self, id_activity):
-        json_data = {
-            "operationName": "ServiceOrders",
-            "variables": {
-                "page": 1,
-                "sort": {
-                    "field": "ID",
-                    "type": "ASC",
+        try:
+            json_data = {
+                "operationName": "ServiceOrders",
+                "variables": {
+                    "page": 1,
+                    "sort": {
+                        "field": "ID",
+                        "type": "ASC",
+                    },
+                    "filter": {
+                        "parentIds": id_activity,  # id_activity (id da atividade pai)
+                    },
                 },
-                "filter": {
-                    "parentIds": id_activity,  # id_activity (id da atividade pai)
-                },
-            },
-            "query": "query ServiceOrders($page: Int, $search: String, $searchType: ServiceOrderSearchType, $sort: ServiceOrderSort, $filter: ServiceOrderFilter) {\n  serviceOrders(\n    page: $page\n    search: $search\n    searchType: $searchType\n    sort: $sort\n    filter: $filter\n  ) {\n    id\n    name\n    yearlyId\n    insertedAt\n    endDate\n    scheduling\n    childrenCount\n    priority {\n      id\n      name\n      __typename\n    }\n    status {\n      id\n      name\n      label\n      color\n      __typename\n    }\n    checklist {\n      id\n      name\n      __typename\n    }\n    place {\n      id\n      name\n      resume\n      __typename\n    }\n    asset {\n      id\n      name\n      type {\n        id\n        name\n        __typename\n      }\n      __typename\n    }\n    group {\n      id\n      name\n      __typename\n    }\n    user {\n      id\n      name\n      __typename\n    }\n    __typename\n  }\n}\n",
-        }
+                "query": "query ServiceOrders($page: Int, $search: String, $searchType: ServiceOrderSearchType, $sort: ServiceOrderSort, $filter: ServiceOrderFilter) {\n  serviceOrders(\n    page: $page\n    search: $search\n    searchType: $searchType\n    sort: $sort\n    filter: $filter\n  ) {\n    id\n    name\n    yearlyId\n    insertedAt\n    endDate\n    scheduling\n    childrenCount\n    priority {\n      id\n      name\n      __typename\n    }\n    status {\n      id\n      name\n      label\n      color\n      __typename\n    }\n    checklist {\n      id\n      name\n      __typename\n    }\n    place {\n      id\n      name\n      resume\n      __typename\n    }\n    asset {\n      id\n      name\n      type {\n        id\n        name\n        __typename\n      }\n      __typename\n    }\n    group {\n      id\n      name\n      __typename\n    }\n    user {\n      id\n      name\n      __typename\n    }\n    __typename\n  }\n}\n",
+            }
 
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            json=json_data,
-        )
-        data = response.json()
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                json=json_data,
+            )
 
-        service_orders = data["data"]["serviceOrders"] if data else None
-        status = service_orders[-1]["status"]["id"] if service_orders else None
+            data = response.json()
 
-        status_id = STATUS_OPEN
+            service_orders = data["data"]["serviceOrders"] if data else None
+            status = service_orders[-1]["status"]["id"] if service_orders else None
 
-        status_verified = (
-            None if status is None else True if status in status_id else False
-        )
+            status_id = STATUS_OPEN
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_status_activity_children.__name__}. Status da Atividade Filha validado.",
-            data={response.content},
-        )
+            status_verified = (
+                None if status is None else True if status in status_id else False
+            )
 
-        return status_verified
+            if status_verified is not None:
+                self.log.info(
+                    status_code=response.status_code,
+                    descricao=f"{self.request_status_activity_children.__name__}. Status da Atividade Filha validado.",
+                    data={response.content},
+                )
+
+            return status_verified
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_status_activity_children.__name__}. Erro ao validar Status da Atividade Filha. {e}",
+                data={response.content},
+            )
 
     def request_edit_activity(
         self,
@@ -256,100 +302,131 @@ class ActivityDataController:
         recused_reason,
         site_name,
     ):
-        json_data = {
-            "operationName": "UpsertServiceOrder",
-            "variables": {
-                "input": {
-                    "id": id,
-                    "name": None,
-                    "userId": 11,
-                    "checklistId": checklist,
-                    "placeId": 18,
-                    "assetId": None,
-                    "scheduling": None,
-                    "priorityId": 1,
-                    "address": None,
-                    "description": self.chatGPT.prompt(
-                        address=address,
-                        city=city,
-                        neighborhood=neighborhood,
-                        opening_reason=opening_reason,
-                        site_name=site_name,
-                        recused_reason=recused_reason,
-                    ),
-                    "documents": [],
-                    "groupId": None,
-                    "fieldValues": [],
+
+        validate_description = self.validation_opening_reason_api_db(
+            id_activity=id, opening_reason=opening_reason
+        )
+
+        try:
+            json_data = {
+                "operationName": "UpsertServiceOrder",
+                "variables": {
+                    "input": {
+                        "id": id,
+                        "name": None,
+                        "userId": 11,
+                        "checklistId": checklist,
+                        "placeId": 18,
+                        "assetId": None,
+                        "scheduling": None,
+                        "priorityId": 1,
+                        "address": None,
+                        "documents": [],
+                        "groupId": None,
+                        "fieldValues": [],
+                    },
                 },
-            },
-            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
-        }
+                "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
+            }
 
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            json=json_data,
-        )
+            if validate_description:
+                json_data["variables"]["input"]["description"] = self.chatGPT.prompt(
+                    address=address,
+                    city=city,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    site_name=site_name,
+                    recused_reason=recused_reason,
+                )
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_edit_activity.__name__} . Atividade Pai editada com sucesso.",
-            data={response.content},
-        )
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                json=json_data,
+            )
 
-        return response
+            self.log.info(
+                status_code=response.status_code,
+                descricao=f"{self.request_edit_activity.__name__} . Atividade Pai editada com sucesso.",
+                data={response.content},
+            )
+
+            return response
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_edit_activity.__name__} . Erro ao editar Atividade Pai. {e}",
+                data={response.content},
+            )
 
     def request_edit_activity_children(
         self,
         address,
         checklist,
         city,
+        id,
         id_children,
         neighborhood,
         opening_reason,
         recused_reason,
         site_name,
     ):
-        json_data = {
-            "operationName": "UpsertServiceOrder",
-            "variables": {
-                "input": {
-                    "id": id_children,
-                    "name": None,
-                    "userId": 10,
-                    "checklistId": checklist,
-                    "placeId": 5,
-                    "assetId": None,
-                    "scheduling": None,
-                    "priorityId": None,
-                    "address": None,
-                    "description": self.chatGPT.prompt(
-                        address=address,
-                        city=city,
-                        neighborhood=neighborhood,
-                        opening_reason=opening_reason,
-                        site_name=site_name,
-                        recused_reason=recused_reason,
-                    ),
-                    "documents": [],
-                    "groupId": None,
-                    "fieldValues": [],
+
+        validate_description = self.validation_opening_reason_api_db(
+            id_activity=id, opening_reason=opening_reason
+        )
+
+        try:
+            json_data = {
+                "operationName": "UpsertServiceOrder",
+                "variables": {
+                    "input": {
+                        "id": id_children,
+                        "name": None,
+                        "userId": 10,
+                        "checklistId": checklist,
+                        "placeId": 5,
+                        "assetId": None,
+                        "scheduling": None,
+                        "priorityId": None,
+                        "address": None,
+                        "documents": [],
+                        "groupId": None,
+                        "fieldValues": [],
+                    },
                 },
-            },
-            "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
-        }
+                "query": "mutation UpsertServiceOrder($input: ServiceOrderInput) {\n  upsertServiceOrder(input: $input) {\n    id\n    __typename\n  }\n}\n",
+            }
 
-        response = requests.post(
-            "https://api.btime.io/new/service-orders/api",
-            headers=self.headers,
-            json=json_data,
-        )
+            if validate_description:
+                json_data["variables"]["input"]["description"] = self.chatGPT.prompt(
+                    address=address,
+                    city=city,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    site_name=site_name,
+                    recused_reason=recused_reason,
+                )
 
-        self.log.info(
-            status_code=response.status_code,
-            descricao=f"{self.request_edit_activity_children.__name__} . Atividade Filha editada com sucesso.",
-            data={response.content},
-        )
+            response = requests.post(
+                "https://api.btime.io/new/service-orders/api",
+                headers=self.headers,
+                json=json_data,
+            )
+
+            self.log.info(
+                status_code=response.status_code,
+                descricao=f"{self.request_edit_activity_children.__name__} . Atividade Filha editada com sucesso.",
+                data={response.content},
+            )
+
+        except Exception as e:
+            self.log.exception(
+                status_code=response.status_code,
+                descricao=f"{self.request_edit_activity_children.__name__} . Erro ao editar Atividade Filha. {e}",
+                data={response.content},
+            )
 
     def match_status_activity(self, rov):
         results = self.segurpro_repository.filter_by_rov(rov)
@@ -366,6 +443,7 @@ class ActivityDataController:
     def match_id_children(self, rov):
         results_children = self.segurpro_repository.filter_by_rov_children(rov)
         results_children = results_children.id_children if results_children else None
+
         return results_children
 
     def validate_status_father(self, status_btime_api: int, status_btime_db: str):
@@ -374,7 +452,9 @@ class ActivityDataController:
                 int(status_btime_db) if status_btime_db.isdigit() else status_btime_db
             )
             is_valid = True if status_btime_api == status_btime_db else False
+
             return is_valid
+
         except:
             return None
 
@@ -387,6 +467,7 @@ class ActivityDataController:
         recused_reason,
         opening_reason,
     ):
+
         verification = bool(
             self.chatGPT.prompt(
                 address=address,
@@ -398,6 +479,7 @@ class ActivityDataController:
                 triagem=True,
             )
         )
+
         return verification
 
     def verify_checklist(self, data, triage=False):
@@ -414,6 +496,7 @@ class ActivityDataController:
                 SistemaEnum.DEFAULT.value,
             )
         )
+
         return checklist
 
     def created_activity(
@@ -463,9 +546,11 @@ class ActivityDataController:
             )
 
             return activity_id
+
         except Exception as e:
-            print(e.__traceback__.tb_lineno)
-            print(e)
+            self.log.exception(
+                descricao=f"Função {self.created_activity.__name__} com erro. {e}",
+            )
 
     def edit_activity(
         self,
@@ -481,21 +566,28 @@ class ActivityDataController:
         validate_status_father,
     ):
 
-        # Se id da atividade pai existir e a atividade filha não existir e o status da atividade pai retornar false, então edita a atividade pai existente
-        if id_activity is not None and validate_status_father is True:
-            self.request_edit_activity(
-                address=address,
-                checklist=checklist,
-                city=city,
-                id=id_activity,
-                neighborhood=neighborhood,
-                opening_reason=opening_reason,
-                recused_reason=recused_reason,
-                site_name=site_name,
-            )
+        try:
+            # Se id da atividade pai existir e a atividade filha não existir e o status da atividade pai retornar false, então edita a atividade pai existente
+            if id_activity is not None and validate_status_father is True:
+                self.request_edit_activity(
+                    address=address,
+                    checklist=checklist,
+                    city=city,
+                    id=id_activity,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
+                )
 
-            return True
-        return False
+                return True
+
+            return False
+
+        except Exception as e:
+            self.log.exception(
+                descricao=f"Função {self.edit_activity.__name__} com erro. {e}",
+            )
 
     def created_activity_children(
         self,
@@ -513,57 +605,63 @@ class ActivityDataController:
         validate_status_father,
     ):
 
-        # Se existir o id pai e não existir a id filha e o status da pai retornar False (fechado) então cria uma nova atividade
-        if (
-            id_activity is not None
-            and children_id is None
-            and validate_status_father is False
-        ):
-            children_id = self.request_created_activity_children(
-                address=address,
-                checklist=checklist,
-                city=city,
-                id_activity=id_activity,
-                neighborhood=neighborhood,
-                opening_reason=opening_reason,
-                recused_reason=recused_reason,
-                site_name=site_name,
+        try:
+            # Se existir o id pai e não existir a id filha e o status da pai retornar False (fechado) então cria uma nova atividade
+            if (
+                id_activity is not None
+                and children_id is None
+                and validate_status_father is False
+            ):
+                children_id = self.request_created_activity_children(
+                    address=address,
+                    checklist=checklist,
+                    city=city,
+                    id_activity=id_activity,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
+                )
+
+                self.segurpro_repository.update(
+                    column="id_children",
+                    id=id_activity,
+                    value=children_id,
+                )
+
+                return children_id
+
+            # Se existir o id pai e existir id filha e o status da filha retornar False (id 1,2 5 ou 6) cria uma nova atividade filha
+            elif (
+                id_activity is not None
+                and children_id is not None
+                and validate_status_children == False
+            ):
+                children_id = self.request_created_activity_children(
+                    address=address,
+                    checklist=checklist,
+                    city=city,
+                    id_activity=id_activity,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
+                )
+
+                self.segurpro_repository.update(
+                    column="id_children",
+                    id=id_activity,
+                    value=children_id,
+                )
+
+                return children_id
+
+            return False
+
+        except Exception as e:
+            self.log.exception(
+                descricao=f"Função {self.created_activity_children.__name__} com erro. {e}",
             )
-
-            self.segurpro_repository.update(
-                column="id_children",
-                id=id_activity,
-                value=children_id,
-            )
-
-            return children_id
-
-        # Se existir o id pai e existir id filha e o status da filha retornar False (id 1,2 5 ou 6) cria uma nova atividade filha
-        elif (
-            id_activity is not None
-            and children_id is not None
-            and validate_status_children == False
-        ):
-            children_id = self.request_created_activity_children(
-                address=address,
-                checklist=checklist,
-                city=city,
-                id_activity=id_activity,
-                neighborhood=neighborhood,
-                opening_reason=opening_reason,
-                recused_reason=recused_reason,
-                site_name=site_name,
-            )
-
-            self.segurpro_repository.update(
-                column="id_children",
-                id=id_activity,
-                value=children_id,
-            )
-
-            return children_id
-
-        return False
 
     def edit_activity_children(
         self,
@@ -580,22 +678,29 @@ class ActivityDataController:
         validate_status_father,
     ):
 
-        # Se id da atividade filha existir e o status retornar true (id 1,2 5 ou 6) então edita a atividade já existente
-        if children_id is not None and validate_status_children:
-            self.request_edit_activity_children(
-                address=address,
-                checklist=checklist,
-                city=city,
-                id_children=children_id,
-                neighborhood=neighborhood,
-                opening_reason=opening_reason,
-                recused_reason=recused_reason,
-                site_name=site_name,
+        try:
+            # Se id da atividade filha existir e o status retornar true (id 1,2 5 ou 6) então edita a atividade já existente
+            if children_id is not None and validate_status_children:
+                self.request_edit_activity_children(
+                    address=address,
+                    checklist=checklist,
+                    city=city,
+                    id=id_activity,
+                    id_children=children_id,
+                    neighborhood=neighborhood,
+                    opening_reason=opening_reason,
+                    recused_reason=recused_reason,
+                    site_name=site_name,
+                )
+
+                return True
+
+            return False
+
+        except Exception as e:
+            self.log.exception(
+                descricao=f"Função {self.edit_activity_children.__name__} com erro. {e}",
             )
-
-            return True
-
-        return False
 
     def handle_process_activity(
         self,
@@ -663,6 +768,7 @@ class ActivityDataController:
             and not edit_activity_children
             and not edit_activity
         ):
+
             if validate_status_father == None:
                 self.created_activity(
                     address=address,
@@ -679,6 +785,7 @@ class ActivityDataController:
                     system=system,
                     triage=triage,
                 )
+
             else:
                 self.edit_activity_children(
                     address=address,
@@ -719,6 +826,7 @@ class ActivityDataController:
                 validate_status_children = self.request_status_activity_children(
                     id_activity
                 )
+
                 validate_status_father = self.validate_status_father(
                     status_btime_api=status_btime_api,
                     status_btime_db=status_btime_db,
@@ -734,6 +842,7 @@ class ActivityDataController:
                     recused_reason=recused_reason,
                     site_name=site_name,
                 )
+
                 checklist = self.verify_checklist(item, triage=is_triage)
 
                 self.handle_process_activity(

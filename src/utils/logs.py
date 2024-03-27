@@ -29,18 +29,16 @@ class Log:
         message = dict()
         for k, v in zip(kwargs.keys(), kwargs.values()):
             message[k] = v
-            
+
         with open(self.filename, 'a') as f:
             f.write(f'{message}\n')
-
-
 
     def info(self,**kwargs):
         message = dict()
         for k, v in zip(kwargs.keys(), kwargs.values()):
             v = 'Executada com sucesso ' + v if k == 'descricao' else v
             message[k] = v
-        
+
         with open(self.filename, 'a') as f:
             f.write(f'{message}\n')
 
@@ -48,7 +46,7 @@ def log_wrapper(func):
     def wrapper(*args, **kwargs):
         instance_name = args[0].__class__.__name__
         method_name = func.__name__
-        
+
         try:
             t1_start = perf_counter()
             logging.info(f"Starting {method_name} in {instance_name}")
@@ -59,4 +57,3 @@ def log_wrapper(func):
         except Exception as ex:
             raise ex
     return wrapper
-

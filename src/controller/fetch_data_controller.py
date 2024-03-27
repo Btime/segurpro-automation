@@ -16,7 +16,7 @@ class FetchData:
                 if response.ok:
                     data = response.json()
                     return data
-                
+
             except Exception as ex:
                 logger.exception(
                     status=response.status_code,

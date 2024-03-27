@@ -25,12 +25,17 @@ class ChatGPT:
 
             prompt_triagem = f"""
                                 Análise do Problema: Avaliar o conteúdo do texto recebido para identificar a natureza do problema com o equipamento ou sistema.
-                                Se o texto indicar que o problema pode ser diagnosticado ou resolvido remotamente (contém termos como offline, problemas de conectividade ou comunicação, ajustar configurações, reconfigurar, atualização de software ou firmware, ou outros termos semelhantes), devo retornar TRUE.
-                                Se o motivo da reprova ou o motivo da abertura indicar que o problema exige a necessidade de troca, efetuar troca de alguma coisa, substituição de equipamentos físico, manutenção presencial, retorno ou visita técnica, ou qualquer termo semelhante, retornar FALSE
-                                Observação: A necessidade de acompanhamento implica ações presenciais, pois geralmente envolve instalação ou supervisão física.
+                                Se o texto indicar que o problema pode ser diagnosticado ou resolvido remotamente (contém termos como offline, problemas de conectividade ou comunicação, ajustar configurações, reconfigurar, atualização de software ou firmware, orçamentos ou outros termos semelhantes), devo retornar TRUE.
+                                Se o motivo da reprova ou o motivo da abertura indicar que o problema exige a necessidade de troca, ,efetuar troca de alguma coisa, substituição de equipamentos físico, manutenção presencial, retorno ou visita técnica, problemas com fechadura, fechadura com problema de conectividade, problemas com portas, ou qualquer termo semelhante, retornar FALSE
+                                Observação: A necessidade de acompanhamento implica ações presenciais, pois geralmente envolve instalação ou supervisão física. Leve em conta que "Site" mencionado tem o significado de "local", logo não é remoto.
                                 Sempre considerar primeiro o campo motivo de recusa.
                                 Traga apenas o resultado TRUE ou FALSE, nenhum texto adicional pois vou utilizar api.
                             """.strip()
+
+            # prompt_triagem = f"""
+            #             Analise o chamado e determine se é possível resolver o problema remotamente. Considere os detalhes fornecidos sobre a natureza da solicitação e avalie se uma solução pode ser implementada sem a necessidade de intervenção física no local. Retorne TRUE se o chamado puder ser resolvido remotamente e FALSE caso contrário. Considere o motivo_da_abertura e o motivo_da_recusa na análise.
+            #             Traga apenas o resultado TRUE ou FALSE, nenhum texto adicional pois vou utilizar api.
+            #     """.strip()
 
             self.completion = self.client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -46,7 +51,7 @@ class ChatGPT:
                     Endereço: {address}, {neighborhood}, {city}
                     Motivo da abertura: {opening_reason}
                     Site: {site_name}
-                    Motivo da Reprova: {recused_reason}
+                    Motivo da recusa: {recused_reason}
                     """
                 }, 
             ])
@@ -55,8 +60,11 @@ class ChatGPT:
             message = self.completion.choices[0].message.content
 
             if triagem:
+                # print(message)
                 if message.lower() == "false":
                     return False
                 else:
                     return True
             return message
+    
+    # "FALSE" "TRUE"
